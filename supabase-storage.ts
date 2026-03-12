@@ -26,6 +26,11 @@ export interface SupabaseSaveSummary {
 export interface StoredArticleSource extends ArticleSourceInput {
   articleId: string;
   lastScrapedAt: string | null;
+  wordpressPostId: number | null;
+  wordpressPostType: string | null;
+  lastWordpressCodesHash: string | null;
+  lastWordpressSyncAt: string | null;
+  lastWordpressSyncError: string | null;
 }
 
 interface ArticleRow {
@@ -142,7 +147,9 @@ export async function listArticleSourcesFromSupabase(options?: {
   const { client, config } = createSupabaseClient();
   let query = client
     .from(config.articlesTable)
-    .select("id,game_name,our_article_url,beebom_article_url,last_scraped_at")
+    .select(
+      "id,game_name,our_article_url,beebom_article_url,last_scraped_at,wordpress_post_id,wordpress_post_type,last_wordpress_codes_hash,last_wordpress_sync_at,last_wordpress_sync_error"
+    )
     .order("game_name", { ascending: true });
 
   if (options?.beebomArticleUrl) {
@@ -167,7 +174,54 @@ export async function listArticleSourcesFromSupabase(options?: {
     ourArticleUrl: String(row.our_article_url),
     beebomArticleUrl: String(row.beebom_article_url),
     lastScrapedAt: row.last_scraped_at ? String(row.last_scraped_at) : null,
+    wordpressPostId:
+      typeof row.wordpress_post_id === "number"
+        ? row.wordpress_post_id
+        : row.wordpress_post_id
+          ? Number(row.wordpress_post_id)
+          : null,
+    wordpressPostType: row.wordpress_post_type ? String(row.wordpress_post_type) : null,
+    lastWordpressCodesHash: row.last_wordpress_codes_hash
+      ? String(row.last_wordpress_codes_hash)
+      : null,
+    lastWordpressSyncAt: row.last_wordpress_sync_at ? String(row.last_wordpress_sync_at) : null,
+    lastWordpressSyncError: row.last_wordpress_sync_error
+      ? String(row.last_wordpress_sync_error)
+      : null,
   }));
+}
+
+export async function updateArticleWordPressSyncState(input: {
+  articleId: string;
+  lastWordpressCodesHash?: string | null;
+  lastWordpressSyncAt?: string | null;
+  lastWordpressSyncError?: string | null;
+}): Promise<void> {
+  const { client, config } = createSupabaseClient();
+  const patch: Record<string, string | null> = {};
+
+  if ("lastWordpressCodesHash" in input) {
+    patch.last_wordpress_codes_hash = input.lastWordpressCodesHash ?? null;
+  }
+
+  if ("lastWordpressSyncAt" in input) {
+    patch.last_wordpress_sync_at = input.lastWordpressSyncAt ?? null;
+  }
+
+  if ("lastWordpressSyncError" in input) {
+    patch.last_wordpress_sync_error = input.lastWordpressSyncError ?? null;
+  }
+
+  const { error } = await client
+    .from(config.articlesTable)
+    .update(patch)
+    .eq("id", input.articleId);
+
+  if (error) {
+    throw new Error(
+      `Supabase article update failed for ${config.schema}.${config.articlesTable}: ${error.message}`
+    );
+  }
 }
 
 export async function saveScrapeResultToSupabase(

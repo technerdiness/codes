@@ -1,0 +1,48 @@
+name: Sync Roblox Codes
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-roblox-codes
+  cancel-in-progress: false
+
+jobs:
+  sync-codes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_DB_SCHEMA: ${{ secrets.SUPABASE_DB_SCHEMA }}
+      SUPABASE_ARTICLES_TABLE: ${{ secrets.SUPABASE_ARTICLES_TABLE }}
+      SUPABASE_CODES_TABLE: ${{ secrets.SUPABASE_CODES_TABLE }}
+      WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+      WORDPRESS_APPLICATION_PASSWORD: ${{ secrets.WORDPRESS_APPLICATION_PASSWORD }}
+      WORDPRESS_CODES_MARKER_START: ${{ secrets.WORDPRESS_CODES_MARKER_START }}
+      WORDPRESS_CODES_MARKER_END: ${{ secrets.WORDPRESS_CODES_MARKER_END }}
+      WORDPRESS_EXPIRED_CODES_MARKER_START: ${{ secrets.WORDPRESS_EXPIRED_CODES_MARKER_START }}
+      WORDPRESS_EXPIRED_CODES_MARKER_END: ${{ secrets.WORDPRESS_EXPIRED_CODES_MARKER_END }}
+      WORDPRESS_CODES_UPDATE_MARKER_START: ${{ secrets.WORDPRESS_CODES_UPDATE_MARKER_START }}
+      WORDPRESS_CODES_UPDATE_MARKER_END: ${{ secrets.WORDPRESS_CODES_UPDATE_MARKER_END }}
+      WORDPRESS_UPDATE_TIMEZONE: ${{ secrets.WORDPRESS_UPDATE_TIMEZONE || 'Asia/Kolkata' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync codes
+        run: npm run sync:codes

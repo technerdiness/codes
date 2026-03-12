@@ -40,6 +40,9 @@ create table if not exists public.roblox_game_code_articles (
   wordpress_lookup_error text,
   wordpress_lookup_requested_at timestamptz,
   wordpress_lookup_completed_at timestamptz,
+  last_wordpress_codes_hash text,
+  last_wordpress_sync_at timestamptz,
+  last_wordpress_sync_error text,
   last_scraped_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -67,6 +70,9 @@ create unique index if not exists roblox_game_code_articles_wordpress_post_id_ke
 
 create index if not exists roblox_game_code_articles_wordpress_lookup_status_idx
   on public.roblox_game_code_articles (wordpress_lookup_status);
+
+create index if not exists roblox_game_code_articles_last_wordpress_sync_at_idx
+  on public.roblox_game_code_articles (last_wordpress_sync_at desc nulls last);
 
 create or replace function public.prepare_wordpress_post_lookup()
 returns trigger

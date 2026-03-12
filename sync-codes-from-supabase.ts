@@ -5,7 +5,16 @@ import {
   listArticleSourcesFromSupabase,
   saveScrapeResultToSupabase,
   type StoredArticleSource,
+  updateArticleWordPressSyncState,
 } from "./supabase-storage.ts";
+import {
+  hashWordPressCodesHtml,
+  normalizeWordPressPostId,
+  renderWordPressCodesHtml,
+  renderWordPressCodesUpdateHtml,
+  renderWordPressExpiredCodesHtml,
+  updateWordPressArticleCodesSection,
+} from "./wordpress.ts";
 
 interface SyncFailure {
   beebomArticleUrl: string;
@@ -19,6 +28,8 @@ interface SyncItemResult {
   activeCodes: number;
   expiredCodes: number;
   attemptedUpserts?: number;
+  wordpressUpdated?: boolean;
+  wordpressUpdateReason?: string;
 }
 
 function readFlagValue(args: string[], flag: string): string | undefined {
@@ -82,7 +93,73 @@ async function syncArticle(
 
   const saved = await saveScrapeResultToSupabase(article, scraped);
   summary.attemptedUpserts = saved.attemptedUpserts;
-  return summary;
+
+  const wordpressPostId = normalizeWordPressPostId(article.wordpressPostId);
+  if (!wordpressPostId) {
+    summary.wordpressUpdated = false;
+    summary.wordpressUpdateReason = "missing_wordpress_post_id";
+    return summary;
+  }
+
+  if (!article.wordpressPostType) {
+    summary.wordpressUpdated = false;
+    summary.wordpressUpdateReason = "missing_wordpress_post_type";
+    return summary;
+  }
+
+  const renderedActiveHtml = renderWordPressCodesHtml(scraped.codes);
+  const renderedExpiredHtml = renderWordPressExpiredCodesHtml(scraped.expiredCodes);
+  const renderedUpdateHtml = renderWordPressCodesUpdateHtml(article.gameName);
+  const renderedHash = hashWordPressCodesHtml(
+    renderedActiveHtml,
+    renderedExpiredHtml,
+    renderedUpdateHtml
+  );
+
+  if (renderedHash === article.lastWordpressCodesHash) {
+    summary.wordpressUpdated = false;
+    summary.wordpressUpdateReason = "no_change";
+    await updateArticleWordPressSyncState({
+      articleId: article.articleId,
+      lastWordpressSyncError: null,
+    });
+    return summary;
+  }
+
+  try {
+    await updateWordPressArticleCodesSection({
+      articleUrl: article.ourArticleUrl,
+      wordpressPostId,
+      wordpressPostType: article.wordpressPostType,
+      activeHtml: renderedActiveHtml,
+      expiredHtml: renderedExpiredHtml,
+      updateHtml: renderedUpdateHtml,
+    });
+
+    await updateArticleWordPressSyncState({
+      articleId: article.articleId,
+      lastWordpressCodesHash: renderedHash,
+      lastWordpressSyncAt: new Date().toISOString(),
+      lastWordpressSyncError: null,
+    });
+
+    summary.wordpressUpdated = true;
+    summary.wordpressUpdateReason = "content_changed";
+    return summary;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    try {
+      await updateArticleWordPressSyncState({
+        articleId: article.articleId,
+        lastWordpressSyncError: message,
+      });
+    } catch {
+      // Preserve the original WordPress sync error.
+    }
+
+    throw error;
+  }
 }
 
 async function main(): Promise<void> {
