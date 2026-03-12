@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "import:codes-sheet": "tsx import-codes-sheet.ts",
+    "sync:codes": "tsx sync-codes-from-supabase.ts",
     "scrape": "tsx run-beebom.ts",
     "scrape:supabase": "tsx run-beebom.ts --save",
     "start": "tsx run-beebom.ts"

@@ -23,22 +23,49 @@ export interface SupabaseSaveSummary {
   attemptedUpserts: number;
 }
 
+export interface StoredArticleSource extends ArticleSourceInput {
+  articleId: string;
+  lastScrapedAt: string | null;
+}
+
 interface ArticleRow {
   game_name: string;
   our_article_url: string;
   beebom_article_url: string;
   source_provider: ScrapeProvider;
-  last_scraped_at: string;
+  last_scraped_at?: string;
 }
 
-function buildArticleRow(source: ArticleSourceInput): ArticleRow {
+interface UpsertArticleOptions {
+  lastScrapedAt?: string;
+}
+
+function mergeRows(existing: PersistedCodeRow, incoming: PersistedCodeRow): PersistedCodeRow {
+  const preferIncoming = incoming.status === "active" && existing.status !== "active";
+  const base = preferIncoming ? incoming : existing;
+  const other = preferIncoming ? existing : incoming;
+
   return {
+    ...base,
+    rewards_text: base.rewards_text ?? other.rewards_text,
+    is_new: base.is_new || other.is_new,
+    last_seen_at: incoming.last_seen_at,
+  };
+}
+
+function buildArticleRow(source: ArticleSourceInput, options?: UpsertArticleOptions): ArticleRow {
+  const row: ArticleRow = {
     game_name: source.gameName,
     our_article_url: source.ourArticleUrl,
     beebom_article_url: source.beebomArticleUrl,
     source_provider: "beebom",
-    last_scraped_at: new Date().toISOString(),
   };
+
+  if (options?.lastScrapedAt) {
+    row.last_scraped_at = options.lastScrapedAt;
+  }
+
+  return row;
 }
 
 function buildRows(articleId: string, source: ArticleSourceInput, result: ScrapeResult): PersistedCodeRow[] {
@@ -66,11 +93,28 @@ function buildRows(articleId: string, source: ArticleSourceInput, result: Scrape
     last_seen_at: seenAt,
   }));
 
-  return [...activeRows, ...expiredRows];
+  const deduped = new Map<string, PersistedCodeRow>();
+
+  [...activeRows, ...expiredRows].forEach((row) => {
+    const key = `${row.article_id}::${row.code}`;
+    const existing = deduped.get(key);
+
+    if (!existing) {
+      deduped.set(key, row);
+      return;
+    }
+
+    deduped.set(key, mergeRows(existing, row));
+  });
+
+  return [...deduped.values()];
 }
 
-async function upsertArticle(source: ArticleSourceInput): Promise<{ articleId: string; lastScrapedAt: string }> {
-  const article = buildArticleRow(source);
+export async function upsertArticleSourceToSupabase(
+  source: ArticleSourceInput,
+  options?: UpsertArticleOptions
+): Promise<{ articleId: string; lastScrapedAt: string | null }> {
+  const article = buildArticleRow(source, options);
   const { client, config } = createSupabaseClient();
 
   const { data, error } = await client
@@ -87,8 +131,43 @@ async function upsertArticle(source: ArticleSourceInput): Promise<{ articleId: s
 
   return {
     articleId: data.id as string,
-    lastScrapedAt: String(data.last_scraped_at),
+    lastScrapedAt: data.last_scraped_at ? String(data.last_scraped_at) : null,
   };
+}
+
+export async function listArticleSourcesFromSupabase(options?: {
+  limit?: number;
+  beebomArticleUrl?: string;
+}): Promise<StoredArticleSource[]> {
+  const { client, config } = createSupabaseClient();
+  let query = client
+    .from(config.articlesTable)
+    .select("id,game_name,our_article_url,beebom_article_url,last_scraped_at")
+    .order("game_name", { ascending: true });
+
+  if (options?.beebomArticleUrl) {
+    query = query.eq("beebom_article_url", options.beebomArticleUrl);
+  }
+
+  if (typeof options?.limit === "number") {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(
+      `Supabase read failed for ${config.schema}.${config.articlesTable}: ${error.message}`
+    );
+  }
+
+  return (data ?? []).map((row) => ({
+    articleId: String(row.id),
+    gameName: String(row.game_name),
+    ourArticleUrl: String(row.our_article_url),
+    beebomArticleUrl: String(row.beebom_article_url),
+    lastScrapedAt: row.last_scraped_at ? String(row.last_scraped_at) : null,
+  }));
 }
 
 export async function saveScrapeResultToSupabase(
@@ -96,7 +175,9 @@ export async function saveScrapeResultToSupabase(
   result: ScrapeResult
 ): Promise<SupabaseSaveSummary> {
   const { client, config } = createSupabaseClient();
-  const { articleId } = await upsertArticle(source);
+  const { articleId } = await upsertArticleSourceToSupabase(source, {
+    lastScrapedAt: new Date().toISOString(),
+  });
   const rows = buildRows(articleId, source, result);
 
   if (!rows.length) {
