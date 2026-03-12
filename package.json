@@ -1,0 +1,21 @@
+{
+  "name": "beebom-scraper",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "scrape": "tsx run-beebom.ts",
+    "scrape:supabase": "tsx run-beebom.ts --save",
+    "start": "tsx run-beebom.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.1",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.3.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
