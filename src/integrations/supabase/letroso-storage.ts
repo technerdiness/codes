@@ -1,4 +1,4 @@
-import type { LetrosoAnswerResult } from "../../types/letroso.ts";
+import type { LetrosoAnswerHistoryEntry, LetrosoAnswerResult } from "../../types/letroso.ts";
 import { createSupabaseClient } from "./client.ts";
 
 interface PersistedLetrosoAnswerRow {
@@ -16,6 +16,11 @@ interface PersistedLetrosoAnswerRow {
   extracted_from: LetrosoAnswerResult["extractedFrom"];
   tile_count: number;
   payload: Record<string, unknown>;
+}
+
+interface PersistedLetrosoAnswerHistoryRow {
+  answer_date: string;
+  answer: string;
 }
 
 export interface LetrosoSupabaseSaveSummary {
@@ -50,6 +55,25 @@ export async function saveLetrosoAnswerToSupabase(
     answer: result.answer,
     tileCount: result.tiles.length,
   };
+}
+
+export async function fetchLetrosoAnswerHistoryFromSupabase(): Promise<LetrosoAnswerHistoryEntry[]> {
+  const { client, config } = createSupabaseClient();
+  const { data, error } = await client
+    .from(config.letrosoAnswersTable)
+    .select("answer_date, answer")
+    .order("answer_date", { ascending: false });
+
+  if (error) {
+    throw new Error(
+      `Supabase history query failed for ${config.schema}.${config.letrosoAnswersTable}: ${error.message}`
+    );
+  }
+
+  return ((data ?? []) as PersistedLetrosoAnswerHistoryRow[]).map((row) => ({
+    answerDate: row.answer_date,
+    answer: row.answer,
+  }));
 }
 
 function buildLetrosoAnswerRow(result: LetrosoAnswerResult): PersistedLetrosoAnswerRow {

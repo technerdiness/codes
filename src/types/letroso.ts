@@ -33,3 +33,8 @@ export interface LetrosoAnswerResult {
   tiles: LetrosoRevealTile[];
   extractedFrom: LetrosoAnswerSource;
 }
+
+export interface LetrosoAnswerHistoryEntry {
+  answerDate: string;
+  answer: string;
+}

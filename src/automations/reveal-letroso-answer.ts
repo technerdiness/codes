@@ -1,6 +1,9 @@
 import "dotenv/config";
 
-import { saveLetrosoAnswerToSupabase } from "../integrations/supabase/letroso-storage.ts";
+import {
+  fetchLetrosoAnswerHistoryFromSupabase,
+  saveLetrosoAnswerToSupabase,
+} from "../integrations/supabase/letroso-storage.ts";
 import { updateWordPressLetrosoAnswerSection } from "../integrations/wordpress.ts";
 import {
   DEFAULT_LETROSO_URL,
@@ -170,15 +173,36 @@ async function main(): Promise<void> {
         logInfo("WordPress skipped: --dry-run");
       }
     } else {
-      const wordpressResult = await updateWordPressLetrosoAnswerSection(result);
-      summary.wordpress = {
-        status: "updated",
-        articleUrl: wordpressResult.articleUrl,
-        wordpressPostId: wordpressResult.wordpressPostId,
-      };
+      const history = (await fetchLetrosoAnswerHistoryFromSupabase()).filter(
+        (entry) => entry.answerDate !== result.answerDate
+      );
+      const wordpressResult = await updateWordPressLetrosoAnswerSection({
+        result,
+        history,
+      });
+      if (wordpressResult.updated) {
+        summary.wordpress = {
+          status: "updated",
+          articleUrl: wordpressResult.articleUrl,
+          wordpressPostId: wordpressResult.wordpressPostId,
+        };
 
-      if (!shouldShowJson && !shouldShowWordOnly) {
-        logInfo(`WordPress updated: post ${wordpressResult.wordpressPostId}`);
+        if (!shouldShowJson && !shouldShowWordOnly) {
+          logInfo(
+            `WordPress updated: post ${wordpressResult.wordpressPostId} (${history.length} history rows)`
+          );
+        }
+      } else {
+        const reason =
+          wordpressResult.reason === "answer_unchanged" ? "answer unchanged" : "no change";
+        summary.wordpress = {
+          status: "skipped",
+          reason,
+        };
+
+        if (!shouldShowJson && !shouldShowWordOnly) {
+          logInfo(`WordPress skipped: ${reason}`);
+        }
       }
     }
   } else if (!shouldShowJson && !shouldShowWordOnly) {

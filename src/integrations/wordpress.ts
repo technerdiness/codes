@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { LetrosoAnswerResult } from "../types/letroso.ts";
+import type { LetrosoAnswerHistoryEntry, LetrosoAnswerResult } from "../types/letroso.ts";
 import type { ExpiredCode, ScrapedCode } from "../types/scraper.ts";
 
 const DEFAULT_ACTIVE_MARKER_START = "<!-- TN_CODES_START -->";
@@ -12,6 +12,10 @@ const DEFAULT_UPDATE_MARKER_END = "<!-- TN_CODES_UPDATE_END -->";
 const DEFAULT_LETROSO_ARTICLE_URL = "https://www.technerdiness.com/puzzle/letroso-answers-today/";
 const DEFAULT_LETROSO_MARKER_START = "<!-- TN_LETROSO_ANSWER_START -->";
 const DEFAULT_LETROSO_MARKER_END = "<!-- TN_LETROSO_ANSWER_END -->";
+const DEFAULT_LETROSO_HISTORY_MARKER_START = "<!-- TN_LETROSO_HISTORY_START -->";
+const DEFAULT_LETROSO_HISTORY_MARKER_END = "<!-- TN_LETROSO_HISTORY_END -->";
+const DEFAULT_LETROSO_CURRENT_DATE_MARKER_START = "<!-- TN_LETROSO_CURRENT_DATE_START -->";
+const DEFAULT_LETROSO_CURRENT_DATE_MARKER_END = "<!-- TN_LETROSO_CURRENT_DATE_END -->";
 
 type WordPressEndpointType = "posts" | "pages";
 type WordPressPostType = "post" | "page";
@@ -21,6 +25,10 @@ interface WordPressPostResponse {
   type?: string;
   slug?: string;
   link?: string;
+  title?: {
+    raw?: string;
+    rendered?: string;
+  };
   content?: {
     raw?: string;
     rendered?: string;
@@ -83,6 +91,33 @@ function getLetrosoMarkerEnd(): string {
   return process.env.WORDPRESS_LETROSO_MARKER_END?.trim() || DEFAULT_LETROSO_MARKER_END;
 }
 
+function getLetrosoHistoryMarkerStart(): string {
+  return (
+    process.env.WORDPRESS_LETROSO_HISTORY_MARKER_START?.trim() ||
+    DEFAULT_LETROSO_HISTORY_MARKER_START
+  );
+}
+
+function getLetrosoHistoryMarkerEnd(): string {
+  return (
+    process.env.WORDPRESS_LETROSO_HISTORY_MARKER_END?.trim() || DEFAULT_LETROSO_HISTORY_MARKER_END
+  );
+}
+
+function getLetrosoCurrentDateMarkerStart(): string {
+  return (
+    process.env.WORDPRESS_LETROSO_CURRENT_DATE_MARKER_START?.trim() ||
+    DEFAULT_LETROSO_CURRENT_DATE_MARKER_START
+  );
+}
+
+function getLetrosoCurrentDateMarkerEnd(): string {
+  return (
+    process.env.WORDPRESS_LETROSO_CURRENT_DATE_MARKER_END?.trim() ||
+    DEFAULT_LETROSO_CURRENT_DATE_MARKER_END
+  );
+}
+
 function mapPostTypeToEndpoint(postType?: string | null): WordPressEndpointType[] {
   if (postType === "post") return ["posts"];
   if (postType === "page") return ["pages"];
@@ -126,10 +161,10 @@ export function renderWordPressCodesUpdateHtml(gameName: string, date = new Date
 }
 
 export function renderWordPressLetrosoAnswerHtml(result: LetrosoAnswerResult): string {
-  const blocks = [
-    `<p><strong>Letroso answer for ${escapeHtml(formatIsoDateLong(result.answerDate))}:</strong></p>`,
-    `<p>${escapeHtml(result.answer)}</p>`,
-  ];
+  const headingHtml = `<p><strong>Letroso answer for ${escapeHtml(
+    formatIsoDateLong(result.answerDate)
+  )}:</strong></p>`;
+  const blocks = [`<p>${escapeHtml(result.answer)}</p>`];
 
   if (result.meaning) {
     blocks.push(
@@ -146,15 +181,57 @@ export function renderWordPressLetrosoAnswerHtml(result: LetrosoAnswerResult): s
     ".tn-letroso-answer-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
     ".tn-letroso-answer-reveal__content p:last-child{margin-bottom:0;}",
     "</style>",
-    `<details class="tn-letroso-answer-reveal">`,
+    headingHtml,
+    `<details class="tn-letroso-answer-reveal" data-answer="${escapeHtml(result.answer)}">`,
     "<summary>Reveal Answer</summary>",
     `<div class="tn-letroso-answer-reveal__content">\n${blocks.join("\n\n")}\n</div>`,
     "</details>",
   ].join("\n");
 }
 
+export function renderWordPressLetrosoHistoryHtml(
+  entries: LetrosoAnswerHistoryEntry[]
+): string {
+  const rows = entries.length
+    ? entries
+        .map(
+          (entry) =>
+            `<tr><td>${escapeHtml(formatIsoDateLong(entry.answerDate))}</td><td>${escapeHtml(
+              entry.answer
+            )}</td></tr>`
+        )
+        .join("")
+    : '<tr><td colspan="2">No Letroso answers saved yet.</td></tr>';
+
+  return [
+    "<table>",
+    "<thead><tr><th>Date</th><th>Answer</th></tr></thead>",
+    `<tbody>${rows}</tbody>`,
+    "</table>",
+  ].join("\n");
+}
+
+export function renderWordPressLetrosoPostTitle(answerDate: string): string {
+  return `Letroso Answers Today (${formatIsoDateLong(answerDate)}) – Complete Answer History`;
+}
+
 export function hashWordPressCodesHtml(activeHtml: string): string {
   return createHash("sha256").update(activeHtml).digest("hex");
+}
+
+function extractMarkedSectionContent(
+  content: string,
+  markerStart: string,
+  markerEnd: string
+): string | null {
+  const startIndex = content.indexOf(markerStart);
+  const endIndex = content.indexOf(markerEnd);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+    return null;
+  }
+
+  return content.slice(startIndex + markerStart.length, endIndex);
 }
 
 function replaceMarkedSection(
@@ -175,6 +252,60 @@ function replaceMarkedSection(
   const before = content.slice(0, startIndex + markerStart.length);
   const after = content.slice(endIndex);
   return `${before}\n${replacementHtml}\n${after}`;
+}
+
+function replaceInlineMarkedText(
+  content: string,
+  replacementText: string,
+  markerStart: string,
+  markerEnd: string
+): string {
+  const startIndex = content.indexOf(markerStart);
+  const endIndex = content.indexOf(markerEnd);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+    throw new Error(
+      `Could not find WordPress inline marker block. Add ${markerStart} and ${markerEnd} to the article content.`
+    );
+  }
+
+  const before = content.slice(0, startIndex + markerStart.length);
+  const after = content.slice(endIndex);
+  return `${before}${replacementText}${after}`;
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeLetrosoAnswerForComparison(value: string | null | undefined): string | null {
+  const normalized = value?.replace(/\s+/g, " ").trim().toUpperCase();
+  return normalized ? normalized : null;
+}
+
+function extractCurrentLetrosoAnswerFromContent(content: string): string | null {
+  const answerSection = extractMarkedSectionContent(
+    content,
+    getLetrosoMarkerStart(),
+    getLetrosoMarkerEnd()
+  );
+
+  if (!answerSection) {
+    return null;
+  }
+
+  const dataAnswerMatch = answerSection.match(/data-answer="([^"]+)"/i);
+  const dataAnswer = normalizeLetrosoAnswerForComparison(dataAnswerMatch?.[1]);
+  if (dataAnswer) {
+    return dataAnswer;
+  }
+
+  const paragraphMatch = answerSection.match(
+    /tn-letroso-answer-reveal__content[^>]*>\s*<p>(.*?)<\/p>/is
+  );
+  return normalizeLetrosoAnswerForComparison(
+    paragraphMatch?.[1] ? stripHtml(paragraphMatch[1]) : null
+  );
 }
 
 export function replaceMarkedSections(
@@ -276,7 +407,7 @@ async function fetchWordPressPostContent(
   articleUrl: string,
   wordpressPostId: number,
   wordpressPostType?: string | null
-): Promise<{ endpoint: WordPressEndpointType; contentRaw: string }> {
+): Promise<{ endpoint: WordPressEndpointType; contentRaw: string; titleRaw: string }> {
   const siteOrigin = new URL(articleUrl).origin;
 
   for (const endpoint of mapPostTypeToEndpoint(wordpressPostType)) {
@@ -289,8 +420,9 @@ async function fetchWordPressPostContent(
       if (!contentRaw) {
         throw new Error(`WordPress ${endpoint} response did not include content.raw`);
       }
+      const titleRaw = data.title?.raw ?? data.title?.rendered ?? "";
 
-      return { endpoint, contentRaw };
+      return { endpoint, contentRaw, titleRaw };
     } catch (error) {
       if (endpoint === mapPostTypeToEndpoint(wordpressPostType).at(-1)) {
         throw error;
@@ -396,29 +528,83 @@ export async function updateWordPressArticleCodesSection(input: {
   });
 }
 
-export async function updateWordPressLetrosoAnswerSection(
-  result: LetrosoAnswerResult
-): Promise<{
+export async function updateWordPressLetrosoAnswerSection(input: {
+  result: LetrosoAnswerResult;
+  history: LetrosoAnswerHistoryEntry[];
+}): Promise<{
   articleUrl: string;
   wordpressPostId: number;
   wordpressPostType: WordPressPostType;
   updated: boolean;
-  reason: "marker_replaced" | "no_change";
+  reason: "marker_replaced" | "no_change" | "answer_unchanged";
 }> {
   const articleUrl = getLetrosoArticleUrl();
-  const updateResult = await updateWordPressArticleMarkedSection({
+  const resolvedPost = await lookupWordPressPostByUrl(articleUrl);
+  const siteOrigin = new URL(articleUrl).origin;
+  const { endpoint, contentRaw, titleRaw } = await fetchWordPressPostContent(
     articleUrl,
-    markerStart: getLetrosoMarkerStart(),
-    markerEnd: getLetrosoMarkerEnd(),
-    replacementHtml: renderWordPressLetrosoAnswerHtml(result),
+    resolvedPost.wordpressPostId,
+    resolvedPost.wordpressPostType
+  );
+  const currentAnswer = extractCurrentLetrosoAnswerFromContent(contentRaw);
+  if (currentAnswer === normalizeLetrosoAnswerForComparison(input.result.answer)) {
+    return {
+      articleUrl,
+      wordpressPostId: resolvedPost.wordpressPostId,
+      wordpressPostType: resolvedPost.wordpressPostType,
+      updated: false,
+      reason: "answer_unchanged",
+    };
+  }
+
+  const updatedTitle = renderWordPressLetrosoPostTitle(input.result.answerDate);
+  const withAnswer = replaceMarkedSection(
+    contentRaw,
+    renderWordPressLetrosoAnswerHtml(input.result),
+    getLetrosoMarkerStart(),
+    getLetrosoMarkerEnd()
+  );
+  const withHistory = replaceMarkedSection(
+    withAnswer,
+    renderWordPressLetrosoHistoryHtml(input.history),
+    getLetrosoHistoryMarkerStart(),
+    getLetrosoHistoryMarkerEnd()
+  );
+  const updatedContent = replaceInlineMarkedText(
+    withHistory,
+    escapeHtml(formatIsoDateLong(input.result.answerDate)),
+    getLetrosoCurrentDateMarkerStart(),
+    getLetrosoCurrentDateMarkerEnd()
+  );
+
+  if (updatedContent === contentRaw && titleRaw === updatedTitle) {
+    return {
+      articleUrl,
+      wordpressPostId: resolvedPost.wordpressPostId,
+      wordpressPostType: resolvedPost.wordpressPostType,
+      updated: false,
+      reason: "no_change",
+    };
+  }
+
+  const requestUrl = new URL(`/wp-json/wp/v2/${endpoint}/${resolvedPost.wordpressPostId}`, siteOrigin);
+  await requestWordPress(requestUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      content: updatedContent,
+      title: updatedTitle,
+    }),
   });
 
   return {
     articleUrl,
-    wordpressPostId: updateResult.wordpressPostId,
-    wordpressPostType: updateResult.wordpressPostType,
-    updated: updateResult.updated,
-    reason: updateResult.updated ? "marker_replaced" : "no_change",
+    wordpressPostId: resolvedPost.wordpressPostId,
+    wordpressPostType: resolvedPost.wordpressPostType,
+    updated: true,
+    reason: "marker_replaced",
   };
 }
 
