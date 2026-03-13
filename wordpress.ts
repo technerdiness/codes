@@ -105,14 +105,8 @@ export function renderWordPressCodesUpdateHtml(gameName: string, date = new Date
   )} codes on ${escapeHtml(formattedDate)}</strong><p>&nbsp;</p>`;
 }
 
-export function hashWordPressCodesHtml(
-  activeHtml: string,
-  expiredHtml: string,
-  updateHtml: string
-): string {
-  return createHash("sha256")
-    .update(`${activeHtml}\n${expiredHtml}\n${updateHtml}`)
-    .digest("hex");
+export function hashWordPressCodesHtml(activeHtml: string): string {
+  return createHash("sha256").update(activeHtml).digest("hex");
 }
 
 function replaceMarkedSection(

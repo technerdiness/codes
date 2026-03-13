@@ -32,6 +32,18 @@ interface SyncItemResult {
   wordpressUpdateReason?: string;
 }
 
+function logInfo(message: string): void {
+  console.log(message);
+}
+
+function logFailure(message: string): void {
+  console.error(message);
+}
+
+function formatArticleLabel(index: number, total: number, gameName: string): string {
+  return `[${index}/${total}] ${gameName}`;
+}
+
 function readFlagValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   if (index === -1) return undefined;
@@ -76,8 +88,10 @@ function printUsage(): void {
 
 async function syncArticle(
   article: StoredArticleSource,
-  shouldPersist: boolean
+  shouldPersist: boolean,
+  label: string
 ): Promise<SyncItemResult> {
+  logInfo(`${label} Scraping ${article.beebomArticleUrl}`);
   const scraped = await scrapeBeebomPage(article.beebomArticleUrl);
   const summary: SyncItemResult = {
     gameName: article.gameName,
@@ -86,35 +100,36 @@ async function syncArticle(
     activeCodes: scraped.codes.length,
     expiredCodes: scraped.expiredCodes.length,
   };
+  logInfo(`${label} Scraped ${summary.activeCodes} active, ${summary.expiredCodes} expired`);
 
   if (!shouldPersist) {
+    logInfo(`${label} Dry run, skipped Supabase and WordPress`);
     return summary;
   }
 
   const saved = await saveScrapeResultToSupabase(article, scraped);
   summary.attemptedUpserts = saved.attemptedUpserts;
+  logInfo(`${label} Supabase upserted ${saved.attemptedUpserts} row(s)`);
 
   const wordpressPostId = normalizeWordPressPostId(article.wordpressPostId);
   if (!wordpressPostId) {
     summary.wordpressUpdated = false;
     summary.wordpressUpdateReason = "missing_wordpress_post_id";
+    logInfo(`${label} WordPress skipped: missing post ID`);
     return summary;
   }
 
   if (!article.wordpressPostType) {
     summary.wordpressUpdated = false;
     summary.wordpressUpdateReason = "missing_wordpress_post_type";
+    logInfo(`${label} WordPress skipped: missing post type`);
     return summary;
   }
 
   const renderedActiveHtml = renderWordPressCodesHtml(scraped.codes);
   const renderedExpiredHtml = renderWordPressExpiredCodesHtml(scraped.expiredCodes);
   const renderedUpdateHtml = renderWordPressCodesUpdateHtml(article.gameName);
-  const renderedHash = hashWordPressCodesHtml(
-    renderedActiveHtml,
-    renderedExpiredHtml,
-    renderedUpdateHtml
-  );
+  const renderedHash = hashWordPressCodesHtml(renderedActiveHtml);
 
   if (renderedHash === article.lastWordpressCodesHash) {
     summary.wordpressUpdated = false;
@@ -123,10 +138,12 @@ async function syncArticle(
       articleId: article.articleId,
       lastWordpressSyncError: null,
     });
+    logInfo(`${label} WordPress skipped: active codes unchanged`);
     return summary;
   }
 
   try {
+    logInfo(`${label} Updating WordPress marker sections`);
     await updateWordPressArticleCodesSection({
       articleUrl: article.ourArticleUrl,
       wordpressPostId,
@@ -144,7 +161,8 @@ async function syncArticle(
     });
 
     summary.wordpressUpdated = true;
-    summary.wordpressUpdateReason = "content_changed";
+    summary.wordpressUpdateReason = "active_codes_changed";
+    logInfo(`${label} WordPress updated`);
     return summary;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -188,42 +206,36 @@ async function main(): Promise<void> {
     limit,
     beebomArticleUrl,
   });
+  const runMode = isDryRun ? "dry-run" : "write";
+  logInfo(`Sync start: ${articles.length} article(s), mode=${runMode}`);
 
   const successes: SyncItemResult[] = [];
   const failures: SyncFailure[] = [];
 
-  for (const article of articles) {
+  for (const [index, article] of articles.entries()) {
+    const label = formatArticleLabel(index + 1, articles.length, article.gameName);
     try {
-      const summary = await syncArticle(article, !isDryRun);
+      const summary = await syncArticle(article, !isDryRun, label);
       successes.push(summary);
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       failures.push({
         beebomArticleUrl: article.beebomArticleUrl,
-        reason: error instanceof Error ? error.message : String(error),
+        reason,
       });
+      logFailure(`${label} Failed`);
+      logFailure(`${label} ${reason}`);
     }
   }
 
-  console.log(
-    JSON.stringify(
-      {
-        dryRun: isDryRun,
-        requestedLimit: limit ?? null,
-        requestedBeebomUrl: beebomArticleUrl ?? null,
-        fetchedArticles: articles.length,
-        syncedArticles: successes.length,
-        failedArticles: failures.length,
-        successes,
-        failures,
-      },
-      null,
-      2
-    )
+  const wordpressUpdatedCount = successes.filter((item) => item.wordpressUpdated).length;
+  logInfo(
+    `Sync complete: ${successes.length} succeeded, ${failures.length} failed, ${wordpressUpdatedCount} WordPress update(s)`
   );
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  console.error(message);
+  const message = error instanceof Error ? error.message : String(error);
+  logFailure(`Sync failed: ${message}`);
   process.exitCode = 1;
 });
