@@ -1,8 +1,9 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_SCHEMA = "public";
 const DEFAULT_ARTICLES_TABLE = "roblox_game_code_articles";
 const DEFAULT_CODES_TABLE = "roblox_game_codes";
+const DEFAULT_LETROSO_ANSWERS_TABLE = "letroso_answers";
 
 export interface SupabaseConfig {
   url: string;
@@ -11,6 +12,7 @@ export interface SupabaseConfig {
   schema: string;
   articlesTable: string;
   table: string;
+  letrosoAnswersTable: string;
 }
 
 function getEnvValue(name: string): string | undefined {
@@ -28,6 +30,8 @@ function resolveSupabaseConfig(): SupabaseConfig {
   const schema = getEnvValue("SUPABASE_DB_SCHEMA") ?? DEFAULT_SCHEMA;
   const articlesTable = getEnvValue("SUPABASE_ARTICLES_TABLE") ?? DEFAULT_ARTICLES_TABLE;
   const table = getEnvValue("SUPABASE_CODES_TABLE") ?? DEFAULT_CODES_TABLE;
+  const letrosoAnswersTable =
+    getEnvValue("SUPABASE_LETROSO_ANSWERS_TABLE") ?? DEFAULT_LETROSO_ANSWERS_TABLE;
 
   if (!url) {
     throw new Error("Missing SUPABASE_URL. Copy .env.example to .env and fill in your Supabase project URL.");
@@ -47,6 +51,7 @@ function resolveSupabaseConfig(): SupabaseConfig {
     schema,
     articlesTable,
     table,
+    letrosoAnswersTable,
   };
 }
 
@@ -54,10 +59,7 @@ export function getSupabaseConfig(): SupabaseConfig {
   return resolveSupabaseConfig();
 }
 
-export function createSupabaseClient(): {
-  client: SupabaseClient;
-  config: SupabaseConfig;
-} {
+export function createSupabaseClient() {
   const config = resolveSupabaseConfig();
 
   const client = createClient(config.url, config.key, {

@@ -1,8 +1,15 @@
 import "dotenv/config";
 
-import { scrapeBeebomPage } from "./beebom.ts";
-import type { ArticleSourceInput } from "./scraper-types.ts";
-import { saveScrapeResultToSupabase } from "./supabase-storage.ts";
+import { scrapeBeebomPage } from "../providers/beebom.ts";
+import { saveScrapeResultToSupabase } from "../integrations/supabase/storage.ts";
+import type { ArticleSourceInput } from "../types/scraper.ts";
+
+function printUsage(): void {
+  console.error("Usage: npm run scrape -- <beebom-article-url> [--dry-run]");
+  console.error(
+    "       npm run scrape:supabase -- <beebom-article-url> --game-name \"Game Name\" --our-article-url <our-article-url> [--dry-run]"
+  );
+}
 
 function isValidUrl(value: string): boolean {
   try {
@@ -16,21 +23,21 @@ function isValidUrl(value: string): boolean {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const shouldSave = args.includes("--save");
+  const isDryRun = args.includes("--dry-run");
   const shouldShowHelp = args.includes("--help") || args.includes("-h");
   const unknownFlags = args.filter(
     (value) =>
       value.startsWith("-") &&
-      !["--save", "--help", "-h", "--game-name", "--our-article-url"].includes(value)
+      !["--save", "--dry-run", "--help", "-h", "--game-name", "--our-article-url"].includes(
+        value
+      )
   );
   const gameName = readFlagValue(args, "--game-name");
   const ourArticleUrl = readFlagValue(args, "--our-article-url");
   const url = readPositionalUrl(args, ["--game-name", "--our-article-url"]);
 
   if (shouldShowHelp) {
-    console.error("Usage: npm run scrape -- <beebom-article-url> [--save]");
-    console.error(
-      "       npm run scrape:supabase -- <beebom-article-url> --game-name \"Game Name\" --our-article-url <our-article-url>"
-    );
+    printUsage();
     process.exitCode = 0;
     return;
   }
@@ -42,7 +49,7 @@ async function main(): Promise<void> {
   }
 
   if (!url) {
-    console.error("Usage: npm run scrape -- <beebom-article-url> [--save]");
+    printUsage();
     process.exitCode = 1;
     return;
   }
@@ -85,7 +92,13 @@ async function main(): Promise<void> {
     };
 
     output.article = articleSource;
-    output.supabase = await saveScrapeResultToSupabase(articleSource, result);
+    output.supabase = isDryRun
+      ? {
+          dryRun: true,
+          skipped: true,
+          reason: "Supabase save skipped by --dry-run.",
+        }
+      : await saveScrapeResultToSupabase(articleSource, result);
   }
 
   console.log(JSON.stringify(output, null, 2));

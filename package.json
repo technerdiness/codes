@@ -1,13 +1,15 @@
 {
-  "name": "beebom-scraper",
+  "name": "codes-automations",
   "version": "1.0.0",
-  "description": "",
+  "description": "Automation scripts for scraping game codes and syncing them to Supabase and WordPress.",
   "scripts": {
-    "import:codes-sheet": "tsx import-codes-sheet.ts",
-    "sync:codes": "tsx sync-codes-from-supabase.ts",
-    "scrape": "tsx run-beebom.ts",
-    "scrape:supabase": "tsx run-beebom.ts --save",
-    "start": "tsx run-beebom.ts"
+    "sync:codes": "tsx src/automations/sync-codes.ts",
+    "scrape": "tsx src/automations/scrape-beebom.ts",
+    "scrape:supabase": "tsx src/automations/scrape-beebom.ts --save",
+    "reveal:letroso": "tsx src/automations/reveal-letroso-answer.ts",
+    "reveal:letroso:supabase": "tsx src/automations/reveal-letroso-answer.ts --save",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "tsx src/automations/scrape-beebom.ts"
   },
   "keywords": [],
   "author": "",

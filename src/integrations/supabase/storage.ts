@@ -1,5 +1,5 @@
-import type { ArticleSourceInput, ScrapeProvider, ScrapeResult } from "./scraper-types.ts";
-import { createSupabaseClient } from "./supabase.ts";
+import type { ArticleSourceInput, ScrapeProvider, ScrapeResult } from "../../types/scraper.ts";
+import { createSupabaseClient } from "./client.ts";
 
 type PersistedCodeStatus = "active" | "expired";
 

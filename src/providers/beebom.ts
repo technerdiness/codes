@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
-import type { ScrapeResult, ScrapedCode } from "./scraper-types";
+import type { Element } from "domhandler";
+
+import type { ScrapeResult, ScrapedCode } from "../types/scraper.ts";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; RobloxCodesBot/1.0)";
 const LIST_SEPARATOR_REGEX = /\s*:\s*|\s*[–—]\s*|(?:\s+-\s*|\s*-\s+)/;
@@ -37,7 +39,7 @@ function stripNewFlag(value: string): { cleaned: string; isNew: boolean } {
  * - Skips divider lists and menus
  * - No regex restriction for code patterns (Beebom may list codes without rewards)
  */
-function findCodesContainer($: cheerio.CheerioAPI): cheerio.Cheerio<cheerio.Element> | null {
+function findCodesContainer($: cheerio.CheerioAPI): cheerio.Cheerio<Element> | null {
   const content = $(".beebom-single-content.entry-content.highlight");
   if (!content.length) return null;
 
@@ -51,9 +53,9 @@ function findCodesContainer($: cheerio.CheerioAPI): cheerio.Cheerio<cheerio.Elem
     const candidates = content.find("ul, ol, table");
 
     // ✅ Fix: initialize as an empty Cheerio collection instead of null
-    let probable: cheerio.Cheerio<cheerio.Element> = $([]);
+    let probable: cheerio.Cheerio<Element> = $([]);
 
-    candidates.each((_: number, el: cheerio.Element) => {
+    candidates.each((_: number, el: Element) => {
       const elem = $(el);
 
       if (
@@ -83,7 +85,7 @@ function findCodesContainer($: cheerio.CheerioAPI): cheerio.Cheerio<cheerio.Elem
       .nextAll("ul, ol, table")
       .not(".is-style-inline-divider-list")
       .not(".menu")
-      .filter((_: number, el: cheerio.Element) => $(el).attr("id") !== "primary-menu")
+      .filter((_: number, el: Element) => $(el).attr("id") !== "primary-menu")
       .first();
 
     if (next.length) return next;
@@ -106,7 +108,7 @@ function findExpiredCodes($: cheerio.CheerioAPI): { code: string; provider: "bee
   headings.each((_, headingEl) => {
     const heading = $(headingEl);
     let pointer = heading.next();
-    let list: cheerio.Cheerio<cheerio.Element> | null = null;
+    let list: cheerio.Cheerio<Element> | null = null;
 
     while (pointer.length) {
       if (pointer.is(HEADING_SELECTOR)) {
@@ -123,7 +125,7 @@ function findExpiredCodes($: cheerio.CheerioAPI): { code: string; provider: "bee
       return;
     }
 
-    list.find("li").each((_: number, li: cheerio.Element) => {
+    list.find("li").each((_: number, li: Element) => {
       const text = $(li).text().trim();
       if (!text) return;
       expired.push({ code: text, provider: "beebom" });
@@ -150,7 +152,7 @@ export async function scrapeBeebomPage(url: string): Promise<ScrapeResult> {
       const rows = container.find("tbody tr");
       const targetRows = rows.length ? rows : container.find("tr");
 
-      targetRows.each((_: number, row: cheerio.Element) => {
+      targetRows.each((_: number, row: Element) => {
         const cells = $(row).find("td");
         if (!cells.length) return;
 
@@ -177,7 +179,7 @@ export async function scrapeBeebomPage(url: string): Promise<ScrapeResult> {
         codes.push(entry);
       });
     } else {
-      container.find("li").each((_: number, li: cheerio.Element) => {
+      container.find("li").each((_: number, li: Element) => {
         const text = $(li).text().trim();
         if (!text) return;
 

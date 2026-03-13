@@ -1,12 +1,12 @@
 import "dotenv/config";
 
-import { scrapeBeebomPage } from "./beebom.ts";
+import { scrapeBeebomPage } from "../providers/beebom.ts";
 import {
   listArticleSourcesFromSupabase,
   saveScrapeResultToSupabase,
   type StoredArticleSource,
   updateArticleWordPressSyncState,
-} from "./supabase-storage.ts";
+} from "../integrations/supabase/storage.ts";
 import {
   hashWordPressCodesHtml,
   normalizeWordPressPostId,
@@ -14,7 +14,7 @@ import {
   renderWordPressCodesUpdateHtml,
   renderWordPressExpiredCodesHtml,
   updateWordPressArticleCodesSection,
-} from "./wordpress.ts";
+} from "../integrations/wordpress.ts";
 
 interface SyncFailure {
   beebomArticleUrl: string;
