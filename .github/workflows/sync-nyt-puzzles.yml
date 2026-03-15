@@ -1,0 +1,76 @@
+name: Sync NYT Puzzles
+
+on:
+  schedule:
+    # GitHub Actions cron uses UTC.
+    # 6:00 AM IST => 12:30 AM UTC.
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-nyt-puzzles
+  cancel-in-progress: false
+
+jobs:
+  sync-nyt-puzzles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Wordle
+            command: npm run reveal:wordle
+          - name: Connections
+            command: npm run reveal:connections
+          - name: Strands
+            command: npm run reveal:strands
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_DB_SCHEMA: ${{ secrets.SUPABASE_DB_SCHEMA }}
+      SUPABASE_WORDLE_ANSWERS_TABLE: ${{ secrets.SUPABASE_WORDLE_ANSWERS_TABLE }}
+      SUPABASE_CONNECTIONS_ANSWERS_TABLE: ${{ secrets.SUPABASE_CONNECTIONS_ANSWERS_TABLE }}
+      SUPABASE_STRANDS_ANSWERS_TABLE: ${{ secrets.SUPABASE_STRANDS_ANSWERS_TABLE }}
+      WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+      WORDPRESS_APPLICATION_PASSWORD: ${{ secrets.WORDPRESS_APPLICATION_PASSWORD }}
+      WORDPRESS_WORDLE_ARTICLE_URL: ${{ secrets.WORDPRESS_WORDLE_ARTICLE_URL }}
+      WORDPRESS_WORDLE_MARKER_START: ${{ secrets.WORDPRESS_WORDLE_MARKER_START }}
+      WORDPRESS_WORDLE_MARKER_END: ${{ secrets.WORDPRESS_WORDLE_MARKER_END }}
+      WORDPRESS_CONNECTIONS_ARTICLE_URL: ${{ secrets.WORDPRESS_CONNECTIONS_ARTICLE_URL }}
+      WORDPRESS_CONNECTIONS_MARKER_START: ${{ secrets.WORDPRESS_CONNECTIONS_MARKER_START }}
+      WORDPRESS_CONNECTIONS_MARKER_END: ${{ secrets.WORDPRESS_CONNECTIONS_MARKER_END }}
+      WORDPRESS_CONNECTIONS_CURRENT_DATE_MARKER_START: ${{ secrets.WORDPRESS_CONNECTIONS_CURRENT_DATE_MARKER_START }}
+      WORDPRESS_CONNECTIONS_CURRENT_DATE_MARKER_END: ${{ secrets.WORDPRESS_CONNECTIONS_CURRENT_DATE_MARKER_END }}
+      WORDPRESS_STRANDS_ARTICLE_URL: ${{ secrets.WORDPRESS_STRANDS_ARTICLE_URL }}
+      WORDPRESS_STRANDS_SPANGRAM_MARKER_START: ${{ secrets.WORDPRESS_STRANDS_SPANGRAM_MARKER_START }}
+      WORDPRESS_STRANDS_SPANGRAM_MARKER_END: ${{ secrets.WORDPRESS_STRANDS_SPANGRAM_MARKER_END }}
+      WORDPRESS_STRANDS_THEME_WORDS_MARKER_START: ${{ secrets.WORDPRESS_STRANDS_THEME_WORDS_MARKER_START }}
+      WORDPRESS_STRANDS_THEME_WORDS_MARKER_END: ${{ secrets.WORDPRESS_STRANDS_THEME_WORDS_MARKER_END }}
+      WORDPRESS_STRANDS_CURRENT_DATE_MARKER_START: ${{ secrets.WORDPRESS_STRANDS_CURRENT_DATE_MARKER_START }}
+      WORDPRESS_STRANDS_CURRENT_DATE_MARKER_END: ${{ secrets.WORDPRESS_STRANDS_CURRENT_DATE_MARKER_END }}
+      WORDPRESS_STRANDS_CLUE_MARKER_START: ${{ secrets.WORDPRESS_STRANDS_CLUE_MARKER_START }}
+      WORDPRESS_STRANDS_CLUE_MARKER_END: ${{ secrets.WORDPRESS_STRANDS_CLUE_MARKER_END }}
+      WORDPRESS_UPDATE_TIMEZONE: ${{ secrets.WORDPRESS_UPDATE_TIMEZONE || 'Asia/Kolkata' }}
+      WORDLE_TIMEZONE: ${{ secrets.WORDLE_TIMEZONE || 'Asia/Kolkata' }}
+      CONNECTIONS_TIMEZONE: ${{ secrets.CONNECTIONS_TIMEZONE || 'Asia/Kolkata' }}
+      STRANDS_TIMEZONE: ${{ secrets.STRANDS_TIMEZONE || 'Asia/Kolkata' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync ${{ matrix.name }}
+        run: ${{ matrix.command }}

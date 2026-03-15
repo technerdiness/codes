@@ -5,9 +5,11 @@
   "scripts": {
     "sync:codes": "tsx src/automations/sync-codes.ts",
     "scrape": "tsx src/automations/scrape-beebom.ts",
-    "scrape:supabase": "tsx src/automations/scrape-beebom.ts --save",
     "reveal:letroso": "tsx src/automations/reveal-letroso-answer.ts",
-    "reveal:letroso:supabase": "tsx src/automations/reveal-letroso-answer.ts --save",
+    "reveal:letroso:chrome": "tsx src/automations/reveal-letroso-answer-chrome.ts",
+    "reveal:connections": "tsx src/automations/reveal-connections-answer.ts",
+    "reveal:strands": "tsx src/automations/reveal-strands-answer.ts",
+    "reveal:wordle": "tsx src/automations/reveal-wordle-answer.ts",
     "typecheck": "tsc -p tsconfig.json",
     "start": "tsx src/automations/scrape-beebom.ts"
   },
@@ -19,6 +21,7 @@
     "@supabase/supabase-js": "^2.99.1",
     "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
+    "playwright-core": "^1.58.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

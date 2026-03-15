@@ -2,14 +2,16 @@ export type LetrosoAnswerSource =
   | "answer-reveal:data-answer"
   | "answer-reveal:tiles"
   | "schema:faq"
-  | "schema:article-body";
+  | "schema:article-body"
+  | "chrome:page-state";
 
 export type LetrosoAnswerDateSource =
   | "page-title"
   | "og-title"
   | "published-at"
   | "modified-at"
-  | "fetched-at";
+  | "fetched-at"
+  | "chrome:state-title";
 
 export interface LetrosoRevealTile {
   index: number;

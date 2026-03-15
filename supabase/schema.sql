@@ -229,14 +229,24 @@ create table if not exists public.letroso_answers (
   constraint letroso_answers_answer_date_key
     unique (answer_date),
   constraint letroso_answers_answer_date_source_check
-    check (answer_date_source in ('page-title', 'og-title', 'published-at', 'modified-at', 'fetched-at')),
+    check (
+      answer_date_source in (
+        'page-title',
+        'og-title',
+        'published-at',
+        'modified-at',
+        'fetched-at',
+        'chrome:state-title'
+      )
+    ),
   constraint letroso_answers_extracted_from_check
     check (
       extracted_from in (
         'answer-reveal:data-answer',
         'answer-reveal:tiles',
         'schema:faq',
-        'schema:article-body'
+        'schema:article-body',
+        'chrome:page-state'
       )
     ),
   constraint letroso_answers_tile_count_check
@@ -254,5 +264,131 @@ create index if not exists letroso_answers_fetched_at_idx
 drop trigger if exists set_letroso_answers_updated_at on public.letroso_answers;
 create trigger set_letroso_answers_updated_at
 before update on public.letroso_answers
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.wordle_answers (
+  id uuid primary key default gen_random_uuid(),
+  answer_date date not null,
+  answer_date_source text not null,
+  answer text not null,
+  source_url text not null,
+  puzzle_id integer not null,
+  days_since_launch integer not null,
+  editor text,
+  fetched_at timestamptz not null,
+  extracted_from text not null,
+  payload jsonb not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint wordle_answers_answer_date_key
+    unique (answer_date),
+  constraint wordle_answers_answer_date_source_check
+    check (answer_date_source in ('api:print-date', 'fetched-at')),
+  constraint wordle_answers_extracted_from_check
+    check (extracted_from in ('nyt:solution-endpoint')),
+  constraint wordle_answers_puzzle_id_check
+    check (puzzle_id > 0),
+  constraint wordle_answers_days_since_launch_check
+    check (days_since_launch >= 0)
+);
+
+comment on table public.wordle_answers is 'NYT Wordle Answer';
+
+create index if not exists wordle_answers_answer_idx
+  on public.wordle_answers (answer);
+
+create index if not exists wordle_answers_fetched_at_idx
+  on public.wordle_answers (fetched_at desc);
+
+drop trigger if exists set_wordle_answers_updated_at on public.wordle_answers;
+create trigger set_wordle_answers_updated_at
+before update on public.wordle_answers
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.connections_answers (
+  id uuid primary key default gen_random_uuid(),
+  answer_date date not null,
+  answer_date_source text not null,
+  source_url text not null,
+  puzzle_id integer not null,
+  editor text,
+  category_count integer not null default 0,
+  categories jsonb not null,
+  fetched_at timestamptz not null,
+  extracted_from text not null,
+  payload jsonb not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint connections_answers_answer_date_key
+    unique (answer_date),
+  constraint connections_answers_answer_date_source_check
+    check (answer_date_source in ('api:print-date', 'fetched-at')),
+  constraint connections_answers_extracted_from_check
+    check (extracted_from in ('nyt:connections-endpoint')),
+  constraint connections_answers_puzzle_id_check
+    check (puzzle_id > 0),
+  constraint connections_answers_category_count_check
+    check (category_count >= 0)
+);
+
+comment on table public.connections_answers is 'NYT Connections Answers';
+
+create index if not exists connections_answers_puzzle_id_idx
+  on public.connections_answers (puzzle_id);
+
+create index if not exists connections_answers_fetched_at_idx
+  on public.connections_answers (fetched_at desc);
+
+drop trigger if exists set_connections_answers_updated_at on public.connections_answers;
+create trigger set_connections_answers_updated_at
+before update on public.connections_answers
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.strands_answers (
+  id uuid primary key default gen_random_uuid(),
+  answer_date date not null,
+  answer_date_source text not null,
+  source_url text not null,
+  puzzle_id integer not null,
+  clue text not null,
+  spangram text not null,
+  theme_word_count integer not null default 0,
+  theme_words jsonb not null,
+  theme_coords jsonb not null,
+  spangram_coords jsonb not null,
+  editor text,
+  constructors text,
+  starting_board jsonb not null,
+  fetched_at timestamptz not null,
+  extracted_from text not null,
+  payload jsonb not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint strands_answers_answer_date_key
+    unique (answer_date),
+  constraint strands_answers_answer_date_source_check
+    check (answer_date_source in ('api:print-date', 'fetched-at')),
+  constraint strands_answers_extracted_from_check
+    check (extracted_from in ('nyt:strands-endpoint')),
+  constraint strands_answers_puzzle_id_check
+    check (puzzle_id > 0),
+  constraint strands_answers_theme_word_count_check
+    check (theme_word_count >= 0)
+);
+
+comment on table public.strands_answers is 'NYT Strands Answers';
+
+create index if not exists strands_answers_puzzle_id_idx
+  on public.strands_answers (puzzle_id);
+
+create index if not exists strands_answers_fetched_at_idx
+  on public.strands_answers (fetched_at desc);
+
+drop trigger if exists set_strands_answers_updated_at on public.strands_answers;
+create trigger set_strands_answers_updated_at
+before update on public.strands_answers
 for each row
 execute function public.set_updated_at();

@@ -4,6 +4,9 @@ const DEFAULT_SCHEMA = "public";
 const DEFAULT_ARTICLES_TABLE = "roblox_game_code_articles";
 const DEFAULT_CODES_TABLE = "roblox_game_codes";
 const DEFAULT_LETROSO_ANSWERS_TABLE = "letroso_answers";
+const DEFAULT_WORDLE_ANSWERS_TABLE = "wordle_answers";
+const DEFAULT_CONNECTIONS_ANSWERS_TABLE = "connections_answers";
+const DEFAULT_STRANDS_ANSWERS_TABLE = "strands_answers";
 
 export interface SupabaseConfig {
   url: string;
@@ -13,6 +16,9 @@ export interface SupabaseConfig {
   articlesTable: string;
   table: string;
   letrosoAnswersTable: string;
+  wordleAnswersTable: string;
+  connectionsAnswersTable: string;
+  strandsAnswersTable: string;
 }
 
 function getEnvValue(name: string): string | undefined {
@@ -32,6 +38,12 @@ function resolveSupabaseConfig(): SupabaseConfig {
   const table = getEnvValue("SUPABASE_CODES_TABLE") ?? DEFAULT_CODES_TABLE;
   const letrosoAnswersTable =
     getEnvValue("SUPABASE_LETROSO_ANSWERS_TABLE") ?? DEFAULT_LETROSO_ANSWERS_TABLE;
+  const wordleAnswersTable =
+    getEnvValue("SUPABASE_WORDLE_ANSWERS_TABLE") ?? DEFAULT_WORDLE_ANSWERS_TABLE;
+  const connectionsAnswersTable =
+    getEnvValue("SUPABASE_CONNECTIONS_ANSWERS_TABLE") ?? DEFAULT_CONNECTIONS_ANSWERS_TABLE;
+  const strandsAnswersTable =
+    getEnvValue("SUPABASE_STRANDS_ANSWERS_TABLE") ?? DEFAULT_STRANDS_ANSWERS_TABLE;
 
   if (!url) {
     throw new Error("Missing SUPABASE_URL. Copy .env.example to .env and fill in your Supabase project URL.");
@@ -52,6 +64,9 @@ function resolveSupabaseConfig(): SupabaseConfig {
     articlesTable,
     table,
     letrosoAnswersTable,
+    wordleAnswersTable,
+    connectionsAnswersTable,
+    strandsAnswersTable,
   };
 }
 
