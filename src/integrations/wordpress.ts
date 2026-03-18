@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 
 import type { ConnectionsAnswerResult } from "../types/connections.ts";
 import type { LetrosoAnswerHistoryEntry, LetrosoAnswerResult } from "../types/letroso.ts";

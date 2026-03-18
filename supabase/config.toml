@@ -1,2 +1,11 @@
 [functions.resolve-wordpress-post-id]
 verify_jwt = false
+
+[functions.sync-codes]
+verify_jwt = false
+
+[functions.sync-letroso]
+verify_jwt = false
+
+[functions.sync-nyt-puzzles]
+verify_jwt = false
