@@ -253,16 +253,27 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function renderWordPressCodesHtml(codes: ScrapedCode[]): string {
+export function renderWordPressCodesHtml(gameName: string, codes: ScrapedCode[]): string {
+  if (!codes.length) {
+    return `<p>As of now, there are no active codes for ${escapeHtml(gameName)}.</p>`;
+  }
+
   const items = codes.map((code) => {
-    const reward = code.rewardsText ? ` ${escapeHtml(code.rewardsText)}` : "";
-    return `<li><strong>${escapeHtml(code.code)}:</strong>${reward}</li>`;
+    if (code.rewardsText) {
+      return `<li><strong>${escapeHtml(code.code)}:</strong> ${escapeHtml(code.rewardsText)}</li>`;
+    }
+
+    return `<li><strong>${escapeHtml(code.code)}</strong></li>`;
   });
 
   return `<ul class="wp-block-list">${items.join("")}</ul>`;
 }
 
-export function renderWordPressExpiredCodesHtml(codes: ExpiredCode[]): string {
+export function renderWordPressExpiredCodesHtml(gameName: string, codes: ExpiredCode[]): string {
+  if (!codes.length) {
+    return `<p>As of now, there are no expired codes for ${escapeHtml(gameName)}.</p>`;
+  }
+
   const text = codes.map((code) => escapeHtml(code.code)).join(", ");
   return `<p>${text}</p>`;
 }

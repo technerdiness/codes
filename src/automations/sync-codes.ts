@@ -126,8 +126,11 @@ async function syncArticle(
     return summary;
   }
 
-  const renderedActiveHtml = renderWordPressCodesHtml(scraped.codes);
-  const renderedExpiredHtml = renderWordPressExpiredCodesHtml(scraped.expiredCodes);
+  const renderedActiveHtml = renderWordPressCodesHtml(article.gameName, scraped.codes);
+  const renderedExpiredHtml = renderWordPressExpiredCodesHtml(
+    article.gameName,
+    scraped.expiredCodes
+  );
   const renderedUpdateHtml = renderWordPressCodesUpdateHtml(article.gameName);
   const renderedHash = hashWordPressCodesHtml(renderedActiveHtml);
 
