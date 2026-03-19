@@ -59,8 +59,7 @@ Setup steps:
 Schedules:
 - NYT puzzles: `30 0 * * *` -> `6:00 AM IST`
 - Roblox codes: `0 */6 * * *`
-- Letroso: `35,40,45,50,55 18 * * *`, `0 19 * * *`, `30 19 * * *`
-  These preserve the existing retry windows around midnight IST.
+- Letroso: `32 3 * * *`, `40 3 * * *` -> `9:02 AM IST`, `9:10 AM IST`
 
 Note:
 - Use the `--use-api` deploy path for these functions. Supabase announced on February 14, 2025 that this path supports shared imports and files outside the single function folder. The default deploy path can fail with `Module not found` for sibling `_shared` imports.

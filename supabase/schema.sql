@@ -524,7 +524,9 @@ begin
     'sync-codes-every-6-hours',
     'sync-letroso-evening-retries',
     'sync-letroso-midnight-ist',
-    'sync-letroso-one-am-ist'
+    'sync-letroso-one-am-ist',
+    'sync-letroso-morning-902-ist',
+    'sync-letroso-morning-910-ist'
   );
 exception
   when undefined_table then
@@ -539,19 +541,13 @@ select cron.schedule(
 );
 
 select cron.schedule(
-  'sync-letroso-evening-retries',
-  '35,40,45,50,55 18 * * *',
+  'sync-letroso-morning-902-ist',
+  '32 3 * * *',
   $$select public.invoke_letroso_sync();$$
 );
 
 select cron.schedule(
-  'sync-letroso-midnight-ist',
-  '0 19 * * *',
-  $$select public.invoke_letroso_sync();$$
-);
-
-select cron.schedule(
-  'sync-letroso-one-am-ist',
-  '30 19 * * *',
+  'sync-letroso-morning-910-ist',
+  '40 3 * * *',
   $$select public.invoke_letroso_sync();$$
 );
