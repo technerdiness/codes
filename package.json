@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "Automation scripts for scraping game codes and syncing them to Supabase and WordPress.",
   "scripts": {
-    "sync:codes": "tsx src/automations/sync-codes.ts",
     "scrape": "tsx src/automations/scrape-beebom.ts",
-    "reveal:letroso": "tsx src/automations/reveal-letroso-answer.ts",
     "reveal:letroso:chrome": "tsx src/automations/reveal-letroso-answer-chrome.ts",
     "reveal:connections": "tsx src/automations/reveal-connections-answer.ts",
     "reveal:strands": "tsx src/automations/reveal-strands-answer.ts",

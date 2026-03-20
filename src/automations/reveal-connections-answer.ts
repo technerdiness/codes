@@ -1,7 +1,5 @@
 import "dotenv/config";
 
-import { saveConnectionsAnswerToSupabase } from "../integrations/supabase/connections-storage.ts";
-import { updateWordPressConnectionsAnswerSection } from "../integrations/wordpress.ts";
 import { revealConnectionsAnswer } from "../providers/nyt-connections.ts";
 import type { ConnectionsAnswerResult, ConnectionsCategoryColor } from "../types/connections.ts";
 
@@ -12,36 +10,9 @@ const CONNECTIONS_COLOR_LABELS: Record<ConnectionsCategoryColor, string> = {
   purple: "PURPLE",
 };
 
-interface ConnectionsRunSummary {
-  sourceUrl: string;
-  answerDate: string;
-  puzzleId: number;
-  extractedFrom: string;
-  categoryCount: number;
-  supabase:
-    | {
-        status: "saved";
-        table: string;
-      }
-    | {
-        status: "skipped";
-        reason: string;
-      };
-  wordpress:
-    | {
-        status: "updated";
-        articleUrl: string;
-        wordpressPostId: number;
-      }
-    | {
-        status: "skipped";
-        reason: string;
-      };
-}
-
 function printUsage(): void {
   console.error(
-    "Usage: npm run reveal:connections -- [--date 2026-03-15] [--timezone Asia/Kolkata] [--no-save] [--no-wordpress] [--dry-run] [--json]"
+    "Usage: npm run reveal:connections -- [--date 2026-03-15] [--timezone Asia/Kolkata] [--json]"
   );
 }
 
@@ -57,10 +28,6 @@ function readFlagValue(args: string[], flag: string): string | undefined {
   }
 
   return value;
-}
-
-function logInfo(message: string): void {
-  console.log(message);
 }
 
 function printTextResult(result: ConnectionsAnswerResult): void {
@@ -84,22 +51,9 @@ function printTextResult(result: ConnectionsAnswerResult): void {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const shouldSave = !args.includes("--no-save");
-  const shouldUpdateWordPress = !args.includes("--no-wordpress");
-  const isDryRun = args.includes("--dry-run");
   const shouldShowHelp = args.includes("--help") || args.includes("-h");
   const shouldShowJson = args.includes("--json");
-  const allowedFlags = new Set([
-    "--save",
-    "--no-save",
-    "--no-wordpress",
-    "--dry-run",
-    "--help",
-    "-h",
-    "--json",
-    "--date",
-    "--timezone",
-  ]);
+  const allowedFlags = new Set(["--help", "-h", "--json", "--date", "--timezone"]);
   const unknownFlags = args.filter((value) => value.startsWith("-") && !allowedFlags.has(value));
 
   if (shouldShowHelp) {
@@ -113,135 +67,17 @@ async function main(): Promise<void> {
 
   const answerDate = readFlagValue(args, "--date");
   const timezoneId = readFlagValue(args, "--timezone") ?? process.env.CONNECTIONS_TIMEZONE;
-
-  if (!shouldShowJson) {
-    logInfo(`Connections sync start: mode=${isDryRun ? "dry-run" : "write"}`);
-    if (answerDate) {
-      logInfo(`Date override: ${answerDate}`);
-    }
-    if (timezoneId) {
-      logInfo(`Timezone override: ${timezoneId}`);
-    }
-  }
-
   const result = await revealConnectionsAnswer({
     answerDate,
     timezoneId,
   });
-  const summary: ConnectionsRunSummary = {
-    sourceUrl: result.sourceUrl,
-    answerDate: result.answerDate,
-    puzzleId: result.puzzleId,
-    extractedFrom: result.extractedFrom,
-    categoryCount: result.categories.length,
-    supabase: shouldSave
-      ? isDryRun
-        ? {
-            status: "skipped",
-            reason: "--dry-run",
-          }
-        : {
-            status: "saved",
-            table: "",
-          }
-      : {
-          status: "skipped",
-          reason: "--no-save",
-        },
-    wordpress: shouldUpdateWordPress
-      ? isDryRun
-        ? {
-            status: "skipped",
-            reason: "--dry-run",
-          }
-        : {
-            status: "updated",
-            articleUrl: "",
-            wordpressPostId: 0,
-          }
-      : {
-          status: "skipped",
-          reason: "--no-wordpress",
-        },
-  };
-
-  if (shouldSave) {
-    if (isDryRun) {
-      if (!shouldShowJson) {
-        logInfo(`Fetched puzzle: #${result.puzzleId} for ${result.answerDate}`);
-        logInfo("Supabase skipped: --dry-run");
-      }
-    } else {
-      const supabaseResult = await saveConnectionsAnswerToSupabase(result);
-      summary.supabase = {
-        status: "saved",
-        table: supabaseResult.table,
-      };
-
-      if (!shouldShowJson) {
-        logInfo(`Fetched puzzle: #${result.puzzleId} for ${result.answerDate}`);
-        logInfo(`Supabase updated: ${supabaseResult.table}`);
-      }
-    }
-  } else if (!shouldShowJson) {
-    logInfo(`Fetched puzzle: #${result.puzzleId} for ${result.answerDate}`);
-    logInfo("Supabase skipped: --no-save");
-  }
-
-  if (shouldUpdateWordPress) {
-    if (isDryRun) {
-      if (!shouldShowJson) {
-        logInfo("WordPress skipped: --dry-run");
-      }
-    } else {
-      const wordpressResult = await updateWordPressConnectionsAnswerSection({
-        result,
-      });
-      if (wordpressResult.updated) {
-        summary.wordpress = {
-          status: "updated",
-          articleUrl: wordpressResult.articleUrl,
-          wordpressPostId: wordpressResult.wordpressPostId,
-        };
-
-        if (!shouldShowJson) {
-          logInfo(`WordPress updated: post ${wordpressResult.wordpressPostId}`);
-        }
-      } else {
-        const reason =
-          wordpressResult.reason === "answer_unchanged" ? "answer unchanged" : "no change";
-        summary.wordpress = {
-          status: "skipped",
-          reason,
-        };
-
-        if (!shouldShowJson) {
-          logInfo(`WordPress skipped: ${reason}`);
-        }
-      }
-    }
-  } else if (!shouldShowJson) {
-    logInfo("WordPress skipped: --no-wordpress");
-  }
 
   if (shouldShowJson) {
-    console.log(
-      JSON.stringify(
-        {
-          ...result,
-          summary,
-        },
-        null,
-        2
-      )
-    );
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 
   printTextResult(result);
-  logInfo(
-    `Connections sync complete: puzzle=${summary.puzzleId}, date=${summary.answerDate}, supabase=${summary.supabase.status}, wordpress=${summary.wordpress.status}`
-  );
 }
 
 main().catch((error: unknown) => {
