@@ -1,0 +1,24 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@supabase/functions-js@*": "2.99.2"
+  },
+  "jsr": {
+    "@supabase/functions-js@2.99.2": {
+      "integrity": "db466018a48fc520ec93f48566b73577c22b3a378d747bb4559c0adda54f55c8"
+    }
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@supabase/supabase-js@^2.99.1",
+        "npm:cheerio@^1.2.0",
+        "npm:domhandler@^5.0.3",
+        "npm:dotenv@^17.3.1",
+        "npm:playwright-core@^1.58.2",
+        "npm:tsx@^4.21.0",
+        "npm:typescript@^5.9.3"
+      ]
+    }
+  }
+}

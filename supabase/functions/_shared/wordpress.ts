@@ -19,6 +19,7 @@ const DEFAULT_LETROSO_CURRENT_DATE_MARKER_END = "<!-- TN_LETROSO_CURRENT_DATE_EN
 
 type WordPressEndpointType = "posts" | "pages";
 type WordPressPostType = "post" | "page";
+export type WordPressSiteKey = "technerdiness" | "gamingwize";
 
 interface WordPressPostResponse {
   id: number;
@@ -32,46 +33,68 @@ interface WordPressPostResponse {
   };
 }
 
-function getRequiredEnv(name: string): string {
+const WORDPRESS_SITE_ENV_PREFIXES: Record<WordPressSiteKey, string> = {
+  technerdiness: "TECHNERDINESS",
+  gamingwize: "GAMINGWIZE",
+};
+
+function getEnvValue(name: string, siteKey?: WordPressSiteKey): string | undefined {
+  if (siteKey) {
+    const siteSpecificValue = Deno.env
+      .get(`${WORDPRESS_SITE_ENV_PREFIXES[siteKey]}_${name}`)
+      ?.trim();
+    if (siteSpecificValue) {
+      return siteSpecificValue;
+    }
+  }
+
   const value = Deno.env.get(name)?.trim();
+  return value || undefined;
+}
+
+function getRequiredEnv(name: string, siteKey?: WordPressSiteKey): string {
+  const value = getEnvValue(name, siteKey);
   if (!value) {
-    throw new Error(`Missing ${name}.`);
+    const siteSpecificName = siteKey ? `${WORDPRESS_SITE_ENV_PREFIXES[siteKey]}_${name} or ` : "";
+    throw new Error(`Missing ${siteSpecificName}${name}.`);
   }
   return value;
 }
 
-function getWordPressAuthHeader(): string {
-  const username = getRequiredEnv("WORDPRESS_USERNAME");
-  const applicationPassword = getRequiredEnv("WORDPRESS_APPLICATION_PASSWORD");
+function getWordPressAuthHeader(siteKey?: WordPressSiteKey): string {
+  const username = getRequiredEnv("WORDPRESS_USERNAME", siteKey);
+  const applicationPassword = getRequiredEnv("WORDPRESS_APPLICATION_PASSWORD", siteKey);
   return `Basic ${btoa(`${username}:${applicationPassword}`)}`;
 }
 
-function getActiveMarkerStart(): string {
-  return Deno.env.get("WORDPRESS_CODES_MARKER_START")?.trim() || DEFAULT_ACTIVE_MARKER_START;
+function getActiveMarkerStart(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_CODES_MARKER_START", siteKey) || DEFAULT_ACTIVE_MARKER_START;
 }
 
-function getActiveMarkerEnd(): string {
-  return Deno.env.get("WORDPRESS_CODES_MARKER_END")?.trim() || DEFAULT_ACTIVE_MARKER_END;
+function getActiveMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_CODES_MARKER_END", siteKey) || DEFAULT_ACTIVE_MARKER_END;
 }
 
-function getExpiredMarkerStart(): string {
-  return Deno.env.get("WORDPRESS_EXPIRED_CODES_MARKER_START")?.trim() || DEFAULT_EXPIRED_MARKER_START;
+function getExpiredMarkerStart(siteKey?: WordPressSiteKey): string {
+  return (
+    getEnvValue("WORDPRESS_EXPIRED_CODES_MARKER_START", siteKey) || DEFAULT_EXPIRED_MARKER_START
+  );
 }
 
-function getExpiredMarkerEnd(): string {
-  return Deno.env.get("WORDPRESS_EXPIRED_CODES_MARKER_END")?.trim() || DEFAULT_EXPIRED_MARKER_END;
+function getExpiredMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_EXPIRED_CODES_MARKER_END", siteKey) || DEFAULT_EXPIRED_MARKER_END;
 }
 
-function getUpdateMarkerStart(): string {
-  return Deno.env.get("WORDPRESS_CODES_UPDATE_MARKER_START")?.trim() || DEFAULT_UPDATE_MARKER_START;
+function getUpdateMarkerStart(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_CODES_UPDATE_MARKER_START", siteKey) || DEFAULT_UPDATE_MARKER_START;
 }
 
-function getUpdateMarkerEnd(): string {
-  return Deno.env.get("WORDPRESS_CODES_UPDATE_MARKER_END")?.trim() || DEFAULT_UPDATE_MARKER_END;
+function getUpdateMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_CODES_UPDATE_MARKER_END", siteKey) || DEFAULT_UPDATE_MARKER_END;
 }
 
-function getUpdateTimezone(): string {
-  return Deno.env.get("WORDPRESS_UPDATE_TIMEZONE")?.trim() || Deno.env.get("TZ") || "UTC";
+function getUpdateTimezone(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_UPDATE_TIMEZONE", siteKey) || Deno.env.get("TZ") || "UTC";
 }
 
 function getLetrosoArticleUrl(): string {
@@ -157,9 +180,13 @@ export function renderWordPressExpiredCodesHtml(gameName: string, codes: Expired
   return `<p>${text}</p>`;
 }
 
-export function renderWordPressCodesUpdateHtml(gameName: string, date = new Date()): string {
+export function renderWordPressCodesUpdateHtml(
+  gameName: string,
+  date = new Date(),
+  siteKey?: WordPressSiteKey
+): string {
   const formattedDate = new Intl.DateTimeFormat("en-US", {
-    timeZone: getUpdateTimezone(),
+    timeZone: getUpdateTimezone(siteKey),
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -224,7 +251,11 @@ export function renderWordPressLetrosoPostTitle(answerDate: string): string {
 }
 
 export function hashWordPressCodesHtml(activeHtml: string): string {
-  return createHash("sha256").update(activeHtml).digest("hex");
+  return createHash("sha256").update(normalizeWordPressCodesHtml(activeHtml)).digest("hex");
+}
+
+function normalizeWordPressCodesHtml(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
 }
 
 function replaceMarkedSection(content: string, replacementHtml: string, markerStart: string, markerEnd: string): string {
@@ -253,10 +284,29 @@ function replaceInlineMarkedText(content: string, replacementText: string, marke
   return `${before}${replacementText}${after}`;
 }
 
-function replaceMarkedSections(content: string, input: { activeHtml: string; expiredHtml: string; updateHtml: string }): string {
-  const withActive = replaceMarkedSection(content, input.activeHtml, getActiveMarkerStart(), getActiveMarkerEnd());
-  const withExpired = replaceMarkedSection(withActive, input.expiredHtml, getExpiredMarkerStart(), getExpiredMarkerEnd());
-  return replaceMarkedSection(withExpired, input.updateHtml, getUpdateMarkerStart(), getUpdateMarkerEnd());
+function replaceMarkedSections(
+  content: string,
+  input: { activeHtml: string; expiredHtml: string; updateHtml: string },
+  siteKey?: WordPressSiteKey
+): string {
+  const withActive = replaceMarkedSection(
+    content,
+    input.activeHtml,
+    getActiveMarkerStart(siteKey),
+    getActiveMarkerEnd(siteKey)
+  );
+  const withExpired = replaceMarkedSection(
+    withActive,
+    input.expiredHtml,
+    getExpiredMarkerStart(siteKey),
+    getExpiredMarkerEnd(siteKey)
+  );
+  return replaceMarkedSection(
+    withExpired,
+    input.updateHtml,
+    getUpdateMarkerStart(siteKey),
+    getUpdateMarkerEnd(siteKey)
+  );
 }
 
 function extractMarkedSectionContent(content: string, markerStart: string, markerEnd: string): string | null {
@@ -290,13 +340,18 @@ function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-async function requestWordPress<T>(url: URL, init: RequestInit = {}, includeAuth = true): Promise<T> {
+async function requestWordPress<T>(
+  url: URL,
+  init: RequestInit = {},
+  includeAuth = true,
+  siteKey?: WordPressSiteKey
+): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) {
     headers.set("Accept", "application/json");
   }
   if (includeAuth) {
-    headers.set("Authorization", getWordPressAuthHeader());
+    headers.set("Authorization", getWordPressAuthHeader(siteKey));
   }
 
   const response = await fetch(url, {
@@ -311,7 +366,12 @@ async function requestWordPress<T>(url: URL, init: RequestInit = {}, includeAuth
   return (await response.json()) as T;
 }
 
-async function fetchWordPressPostContent(articleUrl: string, wordpressPostId: number, wordpressPostType?: string | null): Promise<{
+async function fetchWordPressPostContent(
+  articleUrl: string,
+  wordpressPostId: number,
+  wordpressPostType?: string | null,
+  siteKey?: WordPressSiteKey
+): Promise<{
   endpoint: WordPressEndpointType;
   contentRaw: string;
   titleRaw: string;
@@ -323,7 +383,7 @@ async function fetchWordPressPostContent(articleUrl: string, wordpressPostId: nu
     requestUrl.searchParams.set("context", "edit");
 
     try {
-      const data = await requestWordPress<WordPressPostResponse>(requestUrl);
+      const data = await requestWordPress<WordPressPostResponse>(requestUrl, {}, true, siteKey);
       const contentRaw = data.content?.raw;
       if (!contentRaw) {
         throw new Error(`WordPress ${endpoint} response did not include content.raw`);
@@ -344,7 +404,35 @@ async function fetchWordPressPostContent(articleUrl: string, wordpressPostId: nu
   throw new Error(`Could not load WordPress post ${wordpressPostId} for ${articleUrl}`);
 }
 
-async function lookupWordPressPostByUrl(articleUrl: string): Promise<{
+export async function fetchWordPressArticleActiveCodesHash(input: {
+  siteKey?: WordPressSiteKey;
+  articleUrl: string;
+  wordpressPostId: number;
+  wordpressPostType?: string | null;
+}): Promise<string | null> {
+  const { contentRaw } = await fetchWordPressPostContent(
+    input.articleUrl,
+    input.wordpressPostId,
+    input.wordpressPostType,
+    input.siteKey
+  );
+  const activeSection = extractMarkedSectionContent(
+    contentRaw,
+    getActiveMarkerStart(input.siteKey),
+    getActiveMarkerEnd(input.siteKey)
+  );
+
+  if (activeSection === null) {
+    return null;
+  }
+
+  return hashWordPressCodesHtml(activeSection);
+}
+
+async function lookupWordPressPostByUrl(
+  articleUrl: string,
+  siteKey?: WordPressSiteKey
+): Promise<{
   wordpressPostId: number;
   wordpressPostType: WordPressPostType;
 }> {
@@ -364,7 +452,7 @@ async function lookupWordPressPostByUrl(articleUrl: string): Promise<{
     requestUrl.searchParams.set("_fields", "id,link");
     requestUrl.searchParams.set("per_page", "10");
 
-    const posts = await requestWordPress<WordPressPostResponse[]>(requestUrl, {}, false);
+    const posts = await requestWordPress<WordPressPostResponse[]>(requestUrl, {}, false, siteKey);
     const matched =
       posts.find((post) => normalizeUrlForComparison(post.link) === normalizedTargetUrl) ?? posts[0];
 
@@ -382,6 +470,7 @@ async function lookupWordPressPostByUrl(articleUrl: string): Promise<{
 }
 
 export async function updateWordPressArticleCodesSection(input: {
+  siteKey?: WordPressSiteKey;
   articleUrl: string;
   wordpressPostId: number;
   wordpressPostType?: string | null;
@@ -393,13 +482,14 @@ export async function updateWordPressArticleCodesSection(input: {
   const { endpoint, contentRaw } = await fetchWordPressPostContent(
     input.articleUrl,
     input.wordpressPostId,
-    input.wordpressPostType
+    input.wordpressPostType,
+    input.siteKey
   );
   const updatedContent = replaceMarkedSections(contentRaw, {
     activeHtml: input.activeHtml,
     expiredHtml: input.expiredHtml,
     updateHtml: input.updateHtml,
-  });
+  }, input.siteKey);
   const requestUrl = new URL(`/wp-json/wp/v2/${endpoint}/${input.wordpressPostId}`, siteOrigin);
 
   await requestWordPress<Record<string, unknown>>(requestUrl, {
@@ -410,7 +500,7 @@ export async function updateWordPressArticleCodesSection(input: {
     body: JSON.stringify({
       content: updatedContent,
     }),
-  });
+  }, true, input.siteKey);
 }
 
 export async function updateWordPressLetrosoAnswerSection(input: {
