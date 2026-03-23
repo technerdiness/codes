@@ -1,3 +1,5 @@
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
+
 type LookupStatus = "processing" | "resolved" | "not_found" | "error";
 type WordPressEntityType = "post" | "page";
 type SiteKey = "technerdiness" | "gamingwize";
@@ -34,7 +36,7 @@ interface SiteLookupResult {
   error?: string;
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
 const SITE_KEYS = ["technerdiness", "gamingwize"] as const;
 const SITE_STATE_TABLES: Record<SiteKey, string> = {
   technerdiness: "technerdiness_wordpress_state",
@@ -386,6 +388,10 @@ function isAuthorized(req: Request): boolean {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflightResponse();
+  }
+
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });
   }

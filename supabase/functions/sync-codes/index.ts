@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { scrapeBeebomPage } from "../_shared/providers/beebom.ts";
 import {
   listArticleSourcesFromSupabase,
@@ -75,7 +76,7 @@ interface RenderedWordPressCodesPayload {
   activeHash: string;
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
 const SITE_KEYS: WordPressSiteKey[] = ["technerdiness", "gamingwize"];
 const SITE_LABELS: Record<WordPressSiteKey, string> = {
   technerdiness: "Tech Nerdiness",
@@ -373,6 +374,10 @@ async function handleSyncCodes(payload: SyncCodesRequestPayload): Promise<SyncCo
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflightResponse();
+  }
+
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });
   }

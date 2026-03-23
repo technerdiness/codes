@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
+
 import {
   fetchLetrosoAnswerHistoryFromSupabase,
   saveLetrosoAnswerToSupabase,
@@ -43,7 +45,7 @@ interface SyncLetrosoSummary {
       };
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
 
 function jsonResponse(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -155,6 +157,10 @@ async function handleSyncLetroso(payload: SyncLetrosoRequestPayload): Promise<Sy
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflightResponse();
+  }
+
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });
   }

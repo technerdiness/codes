@@ -192,9 +192,9 @@ export function renderWordPressCodesUpdateHtml(
     year: "numeric",
   }).format(date);
 
-  return `<strong data-rich-text-format-boundary="true">Update: Added new ${escapeHtml(
+  return `<p><strong data-rich-text-format-boundary="true">Update: Added new ${escapeHtml(
     gameName
-  )} codes on ${escapeHtml(formattedDate)}</strong><p>&nbsp;</p>`;
+  )} codes on ${escapeHtml(formattedDate)}</strong></p>`;
 }
 
 export function renderWordPressLetrosoAnswerHtml(result: LetrosoAnswerResult): string {

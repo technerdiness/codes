@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
+
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 type PuzzleName = "wordle" | "connections" | "strands";
@@ -134,7 +136,7 @@ interface NytStrandsApiResponse {
   spangramCoords?: number[][];
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
 const DEFAULT_SCHEMA = "public";
 const DEFAULT_WORDLE_ANSWERS_TABLE = "wordle_answers";
 const DEFAULT_CONNECTIONS_ANSWERS_TABLE = "connections_answers";
@@ -1387,6 +1389,10 @@ async function handleSync(payload: SyncRequestPayload): Promise<SyncSummary> {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflightResponse();
+  }
+
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });
   }
