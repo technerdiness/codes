@@ -1,82 +1,58 @@
 # Codes Automations
 
-Automation workspace for scraping puzzle answers and game codes, with Supabase Edge Functions as the production sync path.
+Convex-powered automation for scraping game codes, puzzle answers, and syncing them to WordPress.
 
 ## Project layout
 
-- `src/automations/`: runnable workflows and CLI entry points
-- `src/providers/`: source-specific scraping logic
-- `src/integrations/`: external system integrations such as Supabase and WordPress
-- `src/types/`: shared TypeScript contracts
-- `supabase/`: database schema, migrations, config, and Edge Functions
+- `convex/`: schema, queries, mutations, actions, cron jobs, and shared libraries
+- `admin/`: React admin panel for managing articles and triggering syncs
+- `scripts/`: one-time migration utilities
 
-## Commands
+## Setup
 
-- `npm run scrape -- <beebom-article-url>`
-- `npm run reveal:letroso:chrome -- --timezone Asia/Tokyo --word-only`
-  Local Letroso extraction through your installed Chrome profile via Playwright. This is a read-only local utility for manual checks.
-- `npm run reveal:connections -- --timezone Asia/Kolkata --json`
-  Read-only local fetch for NYT Connections. Use it for manual checks or date backfills before triggering the Edge Function.
-- `npm run reveal:strands -- --timezone Asia/Kolkata --json`
-  Read-only local fetch for NYT Strands.
-- `npm run reveal:wordle -- --timezone Asia/Kolkata --json`
-  Read-only local fetch for NYT Wordle.
-- `npm run typecheck`
+1. Install dependencies:
+   ```bash
+   npm install
+   cd admin && npm install
+   ```
 
-## Production sync path
+2. Start Convex dev server:
+   ```bash
+   npx convex dev
+   ```
 
-Supabase Edge Functions are the only production write/update path for:
+3. Set Convex environment variables:
+   ```bash
+   npx convex env set WORDPRESS_USERNAME "your-username"
+   npx convex env set WORDPRESS_APPLICATION_PASSWORD "your-app-password"
+   npx convex env set GW_WORDPRESS_USERNAME "your-gw-username"
+   npx convex env set GW_WORDPRESS_APPLICATION_PASSWORD "your-gw-app-password"
+   npx convex env set WORDPRESS_UPDATE_TIMEZONE "Asia/Kolkata"
+   ```
 
-- codes
-- Letroso
-- NYT Wordle
-- NYT Connections
-- NYT Strands
+4. Run the admin panel:
+   ```bash
+   cd admin && npm run dev
+   ```
 
-The local CLIs are intentionally read-only now. Use them for inspection, debugging, and date-specific lookups. Use the Edge Functions when you want Supabase and WordPress to be updated.
+## Convex functions
 
-## Supabase scheduler
+All backend logic runs as Convex functions:
 
-The scheduled jobs now run from Supabase instead of GitHub Actions.
+- **syncCodes**: scrapes Beebom for game codes, saves to DB, updates WordPress
+- **syncLetroso**: scrapes Letroso answer, saves to DB, updates WordPress
+- **syncNytPuzzles**: fetches Wordle/Connections/Strands from NYT, saves answers, updates WordPress
+- **resolveWordpressPostId**: looks up WordPress post IDs by article URL
 
-Files involved:
-- `supabase/functions/sync-codes/index.ts`
-- `supabase/functions/sync-letroso/index.ts`
-- `supabase/functions/sync-nyt-puzzles/index.ts`
-- `supabase/migrations/20260318010000_schedule_nyt_puzzles_sync.sql`
-- `supabase/migrations/20260318023000_schedule_codes_and_letroso_sync.sql`
+## Cron schedules
 
-Setup steps:
-- Deploy the Edge Functions:
-  - `supabase functions deploy sync-codes --use-api --no-verify-jwt`
-  - `supabase functions deploy sync-letroso --use-api --no-verify-jwt`
-- Deploy the Edge Function: `supabase functions deploy sync-nyt-puzzles --use-api --no-verify-jwt`
-- Set Supabase function secrets for the WordPress, Supabase, timezone, and marker env vars used by the NYT sync
-- Store the project URL in Vault as `project_url`
-- Store the webhook secret in both:
-  - Edge Function secret: `NYT_PUZZLES_SYNC_WEBHOOK_SECRET`
-  - Vault secret: `nyt_puzzles_sync_webhook_secret`
-- Do the same for codes:
-  - Edge Function secret: `SYNC_CODES_WEBHOOK_SECRET`
-  - Vault secret: `sync_codes_webhook_secret`
-- Do the same for Letroso:
-  - Edge Function secret: `SYNC_LETROSO_WEBHOOK_SECRET`
-  - Vault secret: `sync_letroso_webhook_secret`
+| Job | Schedule | IST |
+|-----|----------|-----|
+| NYT puzzles | `30 0 * * *` | 6:00 AM |
+| Roblox codes | `0 */6 * * *` | every 6 hours |
+| Letroso (1) | `32 3 * * *` | 9:02 AM |
+| Letroso (2) | `40 3 * * *` | 9:10 AM |
 
-Schedules:
-- NYT puzzles: `30 0 * * *` -> `6:00 AM IST`
-- Roblox codes: `0 */6 * * *`
-- Letroso: `32 3 * * *`, `40 3 * * *` -> `9:02 AM IST`, `9:10 AM IST`
+## Dashboard
 
-Note:
-- Use the `--use-api` deploy path for these functions. Supabase announced on February 14, 2025 that this path supports shared imports and files outside the single function folder. The default deploy path can fail with `Module not found` for sibling `_shared` imports.
-
-## Adding new automations
-
-Add new runnable scripts under `src/automations/` and keep reusable logic out of those files:
-
-- put source-specific parsing in `src/providers/`
-- put API/database clients in `src/integrations/`
-- put shared models in `src/types/`
-
-Keep local CLIs read-only when possible. If a workflow needs to write to Supabase or WordPress on a schedule, prefer an Edge Function entrypoint under `supabase/functions/`.
+View data, logs, and cron status at the [Convex dashboard](https://dashboard.convex.dev).

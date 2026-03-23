@@ -1,895 +1,1438 @@
-import { useDeferredValue, useEffect, useState } from "react";
-
+import { useState, useDeferredValue } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { useConvexAuth } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { api } from "../../convex/_generated/api";
+import { cn, formatDateTime, truncate } from "./lib/utils";
 import {
-  getEnvConfig,
-  invokeFunction,
-  loadDashboardData,
-  saveArticle,
-} from "./lib/api.js";
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Input,
+  Separator,
+  TabsList,
+  TabsTrigger,
+} from "./components/ui";
+import {
+  Play,
+  FlaskConical,
+  RefreshCw,
+  Plus,
+  X,
+  Search,
+  ExternalLink,
+  Pencil,
+  Link2,
+  Zap,
+  BookOpen,
+  Puzzle,
+  LetterText,
+  Gamepad2,
+  LayoutDashboard,
+  Globe,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  AlertCircle,
+  SlidersHorizontal,
+} from "lucide-react";
 
-const APP_CONFIG = getEnvConfig();
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const NAV = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "codes", label: "Game Codes", icon: Gamepad2 },
+  { id: "puzzles", label: "Puzzles", icon: Puzzle },
+  { id: "articles", label: "Articles", icon: BookOpen },
+];
 
 const EMPTY_EDITOR = {
   id: "",
   gameName: "",
-  status: "active",
   sourceBeebomUrl: "",
   technerdinessArticleUrl: "",
   gamingwizeArticleUrl: "",
 };
 
-const NAV_ITEMS = [
-  { id: "automations", label: "Automations" },
-  { id: "articles", label: "Code Articles" },
-];
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-function formatDateTime(value) {
-  if (!value) {
-    return "Never";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+function normalizeUrl(v) {
+  return v.trim().replace(/\/+$/, "").toLowerCase();
 }
 
-function truncate(value, maxLength = 54) {
-  if (!value || value.length <= maxLength) {
-    return value || "";
-  }
-
-  return `${value.slice(0, maxLength - 1)}...`;
-}
-
-function normalizeSearchText(value) {
-  return value.trim().toLowerCase();
-}
-
-function normalizeComparableUrl(value) {
-  return value.trim().replace(/\/+$/, "").toLowerCase();
-}
-
-function mapArticleToEditor(article) {
+function mapArticleToEditor(a) {
   return {
-    id: article.id,
-    gameName: article.gameName,
-    status: article.status || "active",
-    sourceBeebomUrl: article.sourceBeebomUrl,
-    technerdinessArticleUrl: article.technerdinessArticleUrl,
-    gamingwizeArticleUrl: article.gamingwizeArticleUrl,
+    id: a._id,
+    gameName: a.gameName || "",
+    sourceBeebomUrl: a.sourceBeebomUrl || "",
+    technerdinessArticleUrl: a.technerdinessArticleUrl || "",
+    gamingwizeArticleUrl: a.gamingwizeArticleUrl || "",
   };
 }
 
-function findDuplicateArticle(articles, editor) {
+function findDuplicate(articles, editor) {
   const checks = [
-    {
-      editorValue: editor.sourceBeebomUrl,
-      articleKey: "sourceBeebomUrl",
-      label: "Beebom URL",
-    },
-    {
-      editorValue: editor.technerdinessArticleUrl,
-      articleKey: "technerdinessArticleUrl",
-      label: "Tech Nerdiness URL",
-    },
-    {
-      editorValue: editor.gamingwizeArticleUrl,
-      articleKey: "gamingwizeArticleUrl",
-      label: "Gaming Wize URL",
-    },
+    { key: "sourceBeebomUrl", val: editor.sourceBeebomUrl, label: "Beebom URL" },
+    { key: "technerdinessArticleUrl", val: editor.technerdinessArticleUrl, label: "TN URL" },
+    { key: "gamingwizeArticleUrl", val: editor.gamingwizeArticleUrl, label: "GW URL" },
   ];
-
-  for (const check of checks) {
-    if (!check.editorValue.trim()) {
-      continue;
-    }
-
-    const target = normalizeComparableUrl(check.editorValue);
-    const match = articles.find((article) => {
-      if (editor.id && article.id === editor.id) {
-        return false;
-      }
-
-      const current = article[check.articleKey];
-      return current && normalizeComparableUrl(current) === target;
-    });
-
-    if (match) {
-      return {
-        article: match,
-        fieldLabel: check.label,
-      };
-    }
+  for (const c of checks) {
+    if (!c.val.trim()) continue;
+    const t = normalizeUrl(c.val);
+    const m = articles.find(
+      (a) => a._id !== editor.id && a[c.key] && normalizeUrl(a[c.key]) === t,
+    );
+    if (m) return { article: m, label: c.label };
   }
-
   return null;
 }
 
-function sortArticles(articles, sortMode) {
-  const next = [...articles];
+// ── Main App ───────────────────────────────────────────────────────────────
 
-  next.sort((left, right) => {
-    if (sortMode === "game_asc") {
-      return left.gameName.localeCompare(right.gameName);
-    }
+// ── Result Panel Renderer ──────────────────────────────────────────────────
 
-    if (sortMode === "game_desc") {
-      return right.gameName.localeCompare(left.gameName);
-    }
+function renderResultSummary(detail) {
+  if (!detail || typeof detail === "string") {
+    return detail ? <p className="text-sm">{detail}</p> : null;
+  }
 
-    if (sortMode === "status") {
-      return left.status.localeCompare(right.status) ||
-        left.gameName.localeCompare(right.gameName);
-    }
-
-    const leftValue = left.updatedAt || "";
-    const rightValue = right.updatedAt || "";
-    return rightValue.localeCompare(leftValue) ||
-      left.gameName.localeCompare(right.gameName);
-  });
-
-  return next;
-}
-
-function getMissingEnvLabels(config) {
-  const required = [
-    ["supabaseUrl", "VITE_SUPABASE_URL"],
-    ["serviceRoleKey", "VITE_SUPABASE_SERVICE_ROLE_KEY"],
-    ["syncCodesSecret", "VITE_SYNC_CODES_SECRET"],
-    ["resolveSecret", "VITE_RESOLVE_SECRET"],
-  ];
-
-  return required
-    .filter(([key]) => !config[key])
-    .map(([, label]) => label);
-}
-
-function StatusPill({ tone, children }) {
-  return <span className={`status-pill status-pill--${tone}`}>{children}</span>;
-}
-
-function Sidebar({ currentView, onChange, envReady }) {
-  return (
-    <aside className="sidebar">
-      <div className="sidebar__brand">
-        <p className="sidebar__eyebrow">Internal</p>
-        <h1>Codes Admin</h1>
-        <p className="sidebar__caption">
-          Minimal dashboard for automations and code article mappings.
-        </p>
-      </div>
-
-      <nav className="sidebar__nav">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`sidebar__nav-button ${
-              currentView === item.id ? "is-active" : ""
-            }`}
-            onClick={() => onChange(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="sidebar__meta">
-        <StatusPill tone={envReady ? "ok" : "danger"}>
-          {envReady ? "env ready" : "env missing"}
-        </StatusPill>
-      </div>
-    </aside>
-  );
-}
-
-function AutomationCard({
-  title,
-  description,
-  onDryRun,
-  onRealRun,
-  dryDisabled,
-  realDisabled,
-}) {
-  return (
-    <section className="automation-card">
-      <div className="automation-card__copy">
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
-      <div className="automation-card__actions">
-        <button
-          type="button"
-          className="button button--secondary"
-          onClick={onDryRun}
-          disabled={dryDisabled}
-        >
-          Dry Run
-        </button>
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={onRealRun}
-          disabled={realDisabled}
-        >
-          Run
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function ArticleRow({
-  article,
-  isSelected,
-  isBusy,
-  onEdit,
-  onResolve,
-  onSyncDryRun,
-  onSyncReal,
-}) {
-  const techState = article.siteStates.technerdiness;
-  const gamingState = article.siteStates.gamingwize;
-
-  return (
-    <tr className={isSelected ? "is-selected" : ""}>
-      <td>
-        <div className="table-game">
-          <strong>{article.gameName}</strong>
-          <span>{article.id}</span>
-        </div>
-      </td>
-      <td>
-        <StatusPill tone={article.status === "active" ? "ok" : "warn"}>
-          {article.status}
-        </StatusPill>
-      </td>
-      <td>
-        {article.sourceBeebomUrl
-          ? (
-            <a href={article.sourceBeebomUrl} target="_blank" rel="noreferrer">
-              {truncate(article.sourceBeebomUrl)}
-            </a>
-          )
-          : <span className="table-missing">Missing</span>}
-      </td>
-      <td>
-        <div className="table-game">
-          {article.technerdinessArticleUrl
-            ? (
-              <a
-                href={article.technerdinessArticleUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {truncate(article.technerdinessArticleUrl)}
-              </a>
-            )
-            : <span className="table-missing">Missing</span>}
-          <span>{techState.wordpressPostId || "-"}</span>
-        </div>
-      </td>
-      <td>
-        <div className="table-game">
-          {article.gamingwizeArticleUrl
-            ? (
-              <a
-                href={article.gamingwizeArticleUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {truncate(article.gamingwizeArticleUrl)}
-              </a>
-            )
-            : <span className="table-missing">Missing</span>}
-          <span>{gamingState.wordpressPostId || "-"}</span>
-        </div>
-      </td>
-      <td>{formatDateTime(article.updatedAt)}</td>
-      <td>
-        <div className="table-actions">
-          <button
-            type="button"
-            className="table-button"
-            onClick={() => onEdit(article)}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="table-button"
-            onClick={() => onResolve(article)}
-            disabled={isBusy}
-          >
-            Resolve
-          </button>
-          <button
-            type="button"
-            className="table-button"
-            onClick={() => onSyncDryRun(article)}
-            disabled={isBusy || !article.sourceBeebomUrl}
-          >
-            Dry
-          </button>
-          <button
-            type="button"
-            className="table-button table-button--primary"
-            onClick={() => onSyncReal(article)}
-            disabled={isBusy || !article.sourceBeebomUrl}
-          >
-            Run
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function EditorPanel({
-  editor,
-  onChange,
-  onClose,
-  onSave,
-  isSaving,
-  duplicateSuggestion,
-  onOpenDuplicate,
-}) {
-  return (
-    <aside className="editor-panel">
-      <div className="editor-panel__header">
-        <div>
-          <p className="section-label">{editor.id ? "Edit Row" : "Add New"}</p>
-          <h2>{editor.id ? "Edit Code Article" : "Create Code Article"}</h2>
-        </div>
-        <button
-          type="button"
-          className="button button--secondary"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
-
-      {duplicateSuggestion
-        ? (
-          <div className="duplicate-callout">
-            <p>
-              This {duplicateSuggestion.fieldLabel} already exists on{" "}
-              <strong>{duplicateSuggestion.article.gameName}</strong>.
-            </p>
-            <button
-              type="button"
-              className="button button--secondary"
-              onClick={onOpenDuplicate}
-            >
-              Edit Existing Row
-            </button>
+  // Handle arrays (e.g. per-article sync results)
+  if (Array.isArray(detail)) {
+    return (
+      <div className="space-y-2">
+        {detail.map((item, i) => (
+          <div key={i} className="rounded-md border border-border/50 bg-muted/30 p-3">
+            {renderResultSummary(item)}
           </div>
-        )
-        : null}
+        ))}
+      </div>
+    );
+  }
 
-      <form
-        className="editor-form"
-        onSubmit={onSave}
-      >
-        <label>
-          <span>Game Name</span>
-          <input
-            value={editor.gameName}
-            onChange={(event) => onChange("gameName", event.target.value)}
-            placeholder="Anime Fighting Simulator Endless"
-          />
-        </label>
+  // Handle objects — build key-value pairs with smart formatting
+  const entries = Object.entries(detail);
+  if (entries.length === 0) return <p className="text-sm text-muted-foreground">Empty result</p>;
 
-        <label>
-          <span>Status</span>
-          <select
-            value={editor.status}
-            onChange={(event) => onChange("status", event.target.value)}
-          >
-            <option value="active">active</option>
-            <option value="draft">draft</option>
-            <option value="archived">archived</option>
-          </select>
-        </label>
+  return (
+    <div className="space-y-1.5">
+      {entries.map(([key, val]) => {
+        // Nested object/array → recurse
+        if (val && typeof val === "object") {
+          return (
+            <div key={key} className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{formatKey(key)}</p>
+              <div className="pl-3 border-l border-border/40">
+                {renderResultSummary(val)}
+              </div>
+            </div>
+          );
+        }
 
-        <label>
-          <span>Beebom URL</span>
-          <input
-            value={editor.sourceBeebomUrl}
-            onChange={(event) =>
-              onChange("sourceBeebomUrl", event.target.value)}
-            placeholder="https://beebom.com/example-codes/"
-          />
-        </label>
+        // Status-like values get badges
+        const badge = getStatusBadge(key, val);
+        if (badge) {
+          return (
+            <div key={key} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{formatKey(key)}</span>
+              {badge}
+            </div>
+          );
+        }
 
-        <label>
-          <span>Tech Nerdiness URL</span>
-          <input
-            value={editor.technerdinessArticleUrl}
-            onChange={(event) =>
-              onChange("technerdinessArticleUrl", event.target.value)}
-            placeholder="https://www.technerdiness.com/roblox/example-codes/"
-          />
-        </label>
-
-        <label>
-          <span>Gaming Wize URL</span>
-          <input
-            value={editor.gamingwizeArticleUrl}
-            onChange={(event) =>
-              onChange("gamingwizeArticleUrl", event.target.value)}
-            placeholder="https://www.gamingwize.com/roblox/example-codes/"
-          />
-        </label>
-
-        <button
-          type="submit"
-          className="button button--primary"
-          disabled={isSaving || Boolean(duplicateSuggestion)}
-        >
-          {isSaving ? "Saving..." : editor.id ? "Save Changes" : "Create Row"}
-        </button>
-      </form>
-    </aside>
+        // Default key-value
+        return (
+          <div key={key} className="flex items-center justify-between text-sm gap-4">
+            <span className="text-muted-foreground shrink-0">{formatKey(key)}</span>
+            <span className="text-right truncate font-mono text-xs">{String(val)}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
+
+function formatKey(key) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .trim();
+}
+
+function getStatusBadge(key, val) {
+  const s = String(val).toLowerCase();
+  if (s === "saved" || s === "updated" || s === "resolved" || s === "success") {
+    return <Badge variant="success">{String(val)}</Badge>;
+  }
+  if (s.startsWith("skipped") || s === "unchanged" || s === "no-change") {
+    return <Badge variant="warning">{String(val)}</Badge>;
+  }
+  if (s === "error" || s === "failed") {
+    return <Badge variant="destructive">{String(val)}</Badge>;
+  }
+  if (s === "pending") {
+    return <Badge variant="outline">{String(val)}</Badge>;
+  }
+  if (key === "dryRun" && val === true) {
+    return <Badge variant="info">Dry Run</Badge>;
+  }
+  return null;
+}
+
+// ── Result Panel ───────────────────────────────────────────────────────────
+
+function ResultPanel({ result, onClose }) {
+  const [showRaw, setShowRaw] = useState(false);
+
+  return (
+    <div className="fixed inset-y-0 right-0 z-50 flex flex-col w-[420px] max-w-[90vw] border-l bg-card shadow-2xl animate-in">
+      {/* Header */}
+      <div className={cn(
+        "flex items-center justify-between px-4 py-3 border-b",
+        result.status === "error" ? "bg-destructive/5" : "bg-success/5",
+      )}>
+        <div className="flex items-center gap-2 min-w-0">
+          {result.status === "error" ? (
+            <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+          ) : (
+            <Check className="h-4 w-4 text-green-400 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{result.title}</p>
+            <p className="text-xs text-muted-foreground">{formatDateTime(result.ts)}</p>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon-sm" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Readable summary */}
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Badge variant={result.status === "error" ? "destructive" : "success"}>
+              {result.status === "error" ? "Error" : "Success"}
+            </Badge>
+          </div>
+          {renderResultSummary(result.detail)}
+        </div>
+
+        <Separator />
+
+        {/* Raw JSON toggle */}
+        <div className="p-4">
+          <button
+            type="button"
+            onClick={() => setShowRaw(!showRaw)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            {showRaw ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            Raw JSON
+          </button>
+          {showRaw && (
+            <pre className="mt-3 rounded-lg bg-muted/50 p-3 text-xs font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all max-h-[50vh]">
+              {typeof result.detail === "string"
+                ? result.detail
+                : JSON.stringify(result.detail, null, 2)}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Login Screen ───────────────────────────────────────────────────────────
+
+function LoginScreen() {
+  const { signIn } = useAuthActions();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  // Uncomment the line below to enable account creation, then comment it back out.
+  // const allowSetup = true;
+  const allowSetup = false;
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const formData = new FormData(e.currentTarget);
+    formData.set("flow", isSignUp ? "signUp" : "signIn");
+    try {
+      await signIn("password", formData);
+    } catch (err) {
+      setError(isSignUp ? "Sign up failed. Account may already exist." : "Invalid email or password.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">Codes Admin</CardTitle>
+          <CardDescription>
+            {isSignUp ? "Create your admin account." : "Sign in to access the dashboard."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-red-400 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
+            )}
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted-foreground">Email</span>
+              <Input name="email" type="email" placeholder="you@example.com" required />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted-foreground">Password</span>
+              <Input name="password" type="password" placeholder="••••••••" required />
+            </label>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (isSignUp ? "Creating account..." : "Signing in...") : (isSignUp ? "Create Account" : "Sign In")}
+            </Button>
+            {allowSetup && (
+              <button
+                type="button"
+                onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                {isSignUp ? "Already have an account? Sign in" : "First time? Create account"}
+              </button>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [currentView, setCurrentView] = useState("automations");
-  const [articles, setArticles] = useState([]);
-  const [loadingArticles, setLoadingArticles] = useState(false);
-  const [dataError, setDataError] = useState("");
-  const [search, setSearch] = useState("");
-  const [sortMode, setSortMode] = useState("updated_desc");
-  const [editor, setEditor] = useState(EMPTY_EDITOR);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [selectedArticleId, setSelectedArticleId] = useState("");
-  const [savingArticle, setSavingArticle] = useState(false);
-  const [busyMap, setBusyMap] = useState({});
-  const [lastAction, setLastAction] = useState(null);
-  const deferredSearch = useDeferredValue(search);
+  const { isAuthenticated, isLoading } = useConvexAuth();
 
-  const missingEnvLabels = getMissingEnvLabels(APP_CONFIG);
-  const envReady = missingEnvLabels.length === 0;
-
-  async function refreshArticles() {
-    if (!APP_CONFIG.supabaseUrl || !APP_CONFIG.serviceRoleKey) {
-      return;
-    }
-
-    setLoadingArticles(true);
-    setDataError("");
-
-    try {
-      const nextArticles = await loadDashboardData(APP_CONFIG);
-      setArticles(nextArticles);
-    } catch (error) {
-      setDataError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setLoadingArticles(false);
-    }
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
   }
 
-  useEffect(() => {
-    refreshArticles();
-  }, []);
-
-  function setBusy(key, isBusy) {
-    setBusyMap((current) => ({
-      ...current,
-      [key]: isBusy,
-    }));
+  if (!isAuthenticated) {
+    return <LoginScreen />;
   }
 
-  function recordAction(status, title, payload) {
-    setLastAction({
-      id: crypto.randomUUID(),
-      status,
-      title,
-      payload,
-      createdAt: new Date().toISOString(),
-    });
+  return <Dashboard />;
+}
+
+function Dashboard() {
+  const { signOut } = useAuthActions();
+  const [view, setView] = useState("overview");
+  const [result, setResult] = useState(null);
+
+  function notify(status, title, detail) {
+    setResult({ status, title, detail, ts: new Date().toISOString() });
   }
-
-  async function runAction({ busyKey, title, runner, refresh = false }) {
-    setBusy(busyKey, true);
-
-    try {
-      const result = await runner();
-      recordAction("success", title, result);
-      if (refresh) {
-        await refreshArticles();
-      }
-    } catch (error) {
-      recordAction(
-        "error",
-        title,
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setBusy(busyKey, false);
-    }
-  }
-
-  function updateEditorField(field, value) {
-    setEditor((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function openNewEditor() {
-    setSelectedArticleId("");
-    setEditor(EMPTY_EDITOR);
-    setEditorOpen(true);
-  }
-
-  function openEditArticle(article) {
-    setSelectedArticleId(article.id);
-    setEditor(mapArticleToEditor(article));
-    setEditorOpen(true);
-  }
-
-  function closeEditor() {
-    setEditorOpen(false);
-  }
-
-  const duplicateSuggestion = findDuplicateArticle(articles, editor);
-
-  async function handleSaveArticle(event) {
-    event.preventDefault();
-
-    if (duplicateSuggestion) {
-      recordAction(
-        "error",
-        "Create or update code article",
-        `Duplicate ${duplicateSuggestion.fieldLabel} found on ${duplicateSuggestion.article.gameName}. Open that row instead.`,
-      );
-      return;
-    }
-
-    setSavingArticle(true);
-
-    try {
-      const saved = await saveArticle(APP_CONFIG, editor);
-      recordAction(
-        "success",
-        editor.id ? "Updated article row" : "Created article row",
-        saved,
-      );
-      await refreshArticles();
-
-      const match = articles.find((article) => article.id === saved.id);
-      if (match) {
-        openEditArticle(match);
-      } else {
-        setSelectedArticleId(saved.id);
-      }
-    } catch (error) {
-      recordAction(
-        "error",
-        "Create or update code article",
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setSavingArticle(false);
-    }
-  }
-
-  function confirmRealRun(message) {
-    return window.confirm(`${message}\n\nThis will perform a real update.`);
-  }
-
-  function runResolve(article) {
-    runAction({
-      busyKey: `resolve:${article.id}`,
-      title: `Resolve WordPress IDs for ${article.gameName}`,
-      runner: () =>
-        invokeFunction(
-          APP_CONFIG,
-          "resolve-wordpress-post-id",
-          APP_CONFIG.resolveSecret,
-          {
-            articleId: article.id,
-          },
-        ),
-      refresh: true,
-    });
-  }
-
-  function runArticleSync(article, dryRun) {
-    if (!article.sourceBeebomUrl) {
-      recordAction("error", `Sync ${article.gameName}`, "Missing Beebom URL.");
-      return;
-    }
-
-    if (!dryRun && !confirmRealRun(`Run real sync for ${article.gameName}?`)) {
-      return;
-    }
-
-    runAction({
-      busyKey: `sync:${article.id}:${dryRun ? "dry" : "real"}`,
-      title: `${dryRun ? "Dry run" : "Real sync"} for ${article.gameName}`,
-      runner: () =>
-        invokeFunction(
-          APP_CONFIG,
-          "sync-codes",
-          APP_CONFIG.syncCodesSecret,
-          dryRun
-            ? { beebomArticleUrl: article.sourceBeebomUrl, dryRun: true }
-            : { beebomArticleUrl: article.sourceBeebomUrl },
-        ),
-      refresh: true,
-    });
-  }
-
-  function runAllCodes(dryRun) {
-    if (!dryRun && !confirmRealRun("Run real sync for all code articles?")) {
-      return;
-    }
-
-    runAction({
-      busyKey: `sync-all:${dryRun ? "dry" : "real"}`,
-      title: `${dryRun ? "Dry run" : "Real sync"} for all code articles`,
-      runner: () =>
-        invokeFunction(
-          APP_CONFIG,
-          "sync-codes",
-          APP_CONFIG.syncCodesSecret,
-          dryRun ? { dryRun: true } : {},
-        ),
-      refresh: true,
-    });
-  }
-
-  function runLetroso(dryRun) {
-    if (!dryRun && !confirmRealRun("Run real Letroso sync?")) {
-      return;
-    }
-
-    runAction({
-      busyKey: `letroso:${dryRun ? "dry" : "real"}`,
-      title: `${dryRun ? "Dry run" : "Real run"} for Letroso`,
-      runner: () =>
-        invokeFunction(
-          APP_CONFIG,
-          "sync-letroso",
-          APP_CONFIG.syncLetrosoSecret,
-          dryRun ? { dryRun: true } : {},
-        ),
-    });
-  }
-
-  function runNyt(dryRun) {
-    if (!dryRun && !confirmRealRun("Run real NYT puzzles sync?")) {
-      return;
-    }
-
-    runAction({
-      busyKey: `nyt:${dryRun ? "dry" : "real"}`,
-      title: `${dryRun ? "Dry run" : "Real run"} for NYT puzzles`,
-      runner: () =>
-        invokeFunction(
-          APP_CONFIG,
-          "sync-nyt-puzzles",
-          APP_CONFIG.nytPuzzlesSecret,
-          dryRun ? { dryRun: true } : {},
-        ),
-    });
-  }
-
-  const searchNeedle = normalizeSearchText(deferredSearch);
-  const visibleArticles = sortArticles(
-    articles.filter((article) => {
-      if (!searchNeedle) {
-        return true;
-      }
-
-      const haystack = [
-        article.gameName,
-        article.sourceBeebomUrl,
-        article.technerdinessArticleUrl,
-        article.gamingwizeArticleUrl,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(searchNeedle);
-    }),
-    sortMode,
-  );
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        currentView={currentView}
-        onChange={setCurrentView}
-        envReady={envReady}
-      />
-
-      <main className="app-main">
-        <header className="page-header">
-          <div>
-            <p className="section-label">
-              {currentView === "automations" ? "Automations" : "Code Articles"}
-            </p>
-            <h2>
-              {currentView === "automations"
-                ? "Run project functions manually"
-                : "Manage Roblox code article rows"}
-            </h2>
-          </div>
-
-          {currentView === "articles"
-            ? (
-              <div className="page-header__actions">
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  onClick={refreshArticles}
-                  disabled={loadingArticles}
-                >
-                  {loadingArticles ? "Refreshing..." : "Refresh"}
-                </button>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={openNewEditor}
-                >
-                  Add New
-                </button>
-              </div>
-            )
-            : null}
-        </header>
-
-        {!envReady
-          ? (
-            <section className="notice notice--error">
-              <strong>Missing required envs:</strong>{" "}
-              {missingEnvLabels.join(", ")}
-            </section>
-          )
-          : null}
-
-        {dataError
-          ? <section className="notice notice--error">{dataError}</section>
-          : null}
-
-        {lastAction
-          ? (
-            <section
-              className={`notice ${
-                lastAction.status === "error"
-                  ? "notice--error"
-                  : "notice--success"
-              }`}
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar */}
+      <aside className="flex w-56 shrink-0 flex-col border-r bg-card">
+        <div className="p-5">
+          <h1 className="text-lg font-bold tracking-tight">Codes Admin</h1>
+          <p className="text-xs text-muted-foreground">Automation Dashboard</p>
+        </div>
+        <Separator />
+        <nav className="flex flex-col gap-0.5 p-2">
+          {NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setView(item.id)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                view === item.id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
             >
-              <strong>{lastAction.title}</strong>
-              <span>{formatDateTime(lastAction.createdAt)}</span>
-              <pre>{typeof lastAction.payload === "string" ? lastAction.payload : JSON.stringify(lastAction.payload, null, 2)}</pre>
-            </section>
-          )
-          : null}
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto p-3 space-y-2">
+          <Badge variant="success">Connected</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground"
+            onClick={() => void signOut()}
+          >
+            Sign Out
+          </Button>
+        </div>
+      </aside>
 
-        {currentView === "automations"
-          ? (
-            <section className="automation-grid">
-              <AutomationCard
-                title="Sync Codes"
-                description="Run code scraping and WordPress updates for all article rows."
-                onDryRun={() => runAllCodes(true)}
-                onRealRun={() => runAllCodes(false)}
-                dryDisabled={!APP_CONFIG.syncCodesSecret ||
-                  busyMap["sync-all:dry"]}
-                realDisabled={!APP_CONFIG.syncCodesSecret ||
-                  busyMap["sync-all:real"]}
-              />
-              <AutomationCard
-                title="Sync Letroso"
-                description="Trigger the Letroso scraper and WordPress updater."
-                onDryRun={() => runLetroso(true)}
-                onRealRun={() => runLetroso(false)}
-                dryDisabled={!APP_CONFIG.syncLetrosoSecret ||
-                  busyMap["letroso:dry"]}
-                realDisabled={!APP_CONFIG.syncLetrosoSecret ||
-                  busyMap["letroso:real"]}
-              />
-              <AutomationCard
-                title="Sync NYT Puzzles"
-                description="Trigger the NYT puzzle updater for Wordle, Connections, and Strands."
-                onDryRun={() => runNyt(true)}
-                onRealRun={() => runNyt(false)}
-                dryDisabled={!APP_CONFIG.nytPuzzlesSecret || busyMap["nyt:dry"]}
-                realDisabled={!APP_CONFIG.nytPuzzlesSecret ||
-                  busyMap["nyt:real"]}
-              />
-            </section>
-          )
-          : (
-            <section className={editorOpen ? "articles-layout articles-layout--with-editor" : "articles-layout"}>
-              <div className="table-panel">
-                <div className="table-toolbar">
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search game name or URL"
-                  />
-                  <select
-                    value={sortMode}
-                    onChange={(event) => setSortMode(event.target.value)}
-                  >
-                    <option value="updated_desc">Last Updated</option>
-                    <option value="game_asc">Game Name A-Z</option>
-                    <option value="game_desc">Game Name Z-A</option>
-                    <option value="status">Status</option>
-                  </select>
+      {/* Main content */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="p-6 lg:p-8 space-y-6">
+          {view === "overview" && <OverviewPage notify={notify} />}
+          {view === "codes" && <CodesPage notify={notify} />}
+          {view === "puzzles" && <PuzzlesPage notify={notify} />}
+          {view === "articles" && <ArticlesPage notify={notify} />}
+        </div>
+      </main>
+
+      {/* Result panel — overlays on top, does not shift layout */}
+      {result && <ResultPanel result={result} onClose={() => setResult(null)} />}
+
+      {/* Backdrop */}
+      {result && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30"
+          onClick={() => setResult(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Overview Page ──────────────────────────────────────────────────────────
+
+function OverviewPage({ notify }) {
+  const articles = useQuery(api.articles.listArticles) ?? [];
+
+  const totalArticles = articles.length;
+  const withBeebom = articles.filter((a) => a.sourceBeebomUrl).length;
+  const tnLinked = articles.filter(
+    (a) => a.siteStates.technerdiness.wordpressPostId,
+  ).length;
+  const gwLinked = articles.filter(
+    (a) => a.siteStates.gamingwize.wordpressPostId,
+  ).length;
+
+  return (
+    <>
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
+        <p className="text-muted-foreground">Overview of your automation system.</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Total Articles" value={totalArticles} />
+        <StatCard label="Beebom Sources" value={withBeebom} />
+        <StatCard label="TN Linked" value={tnLinked} />
+        <StatCard label="GW Linked" value={gwLinked} />
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <h3 className="text-lg font-semibold mb-3">Quick Actions</h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <QuickActionCard
+            title="Sync All Codes"
+            description="Scrape Beebom and update WordPress for all articles."
+            icon={Gamepad2}
+            notify={notify}
+            actionHook={() => useAction(api.syncCodes.syncCodes)}
+            runArgs={{}}
+            dryArgs={{ dryRun: true }}
+          />
+          <QuickActionCard
+            title="Sync Letroso"
+            description="Fetch today's Letroso answer and update WordPress."
+            icon={LetterText}
+            notify={notify}
+            actionHook={() => useAction(api.syncLetroso.syncLetroso)}
+            runArgs={{}}
+            dryArgs={{ dryRun: true }}
+          />
+          <QuickActionCard
+            title="Sync All NYT Puzzles"
+            description="Fetch Wordle, Connections, and Strands answers."
+            icon={Puzzle}
+            notify={notify}
+            actionHook={() => useAction(api.syncNytPuzzles.syncNytPuzzles)}
+            runArgs={{}}
+            dryArgs={{ dryRun: true }}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-3xl font-bold mt-1">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickActionCard({ title, description, icon: Icon, notify, actionHook, runArgs, dryArgs }) {
+  const action = actionHook();
+  const [busy, setBusy] = useState(null);
+
+  async function run(isDry) {
+    const args = isDry ? dryArgs : runArgs;
+    const label = isDry ? `Dry run: ${title}` : title;
+    setBusy(isDry ? "dry" : "run");
+    try {
+      const result = await action(args);
+      notify("success", label, result);
+    } catch (e) {
+      notify("error", label, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
+            <Icon className="h-4 w-4" />
+          </div>
+          <CardTitle className="text-sm">{title}</CardTitle>
+        </div>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => run(true)}
+            disabled={busy !== null}
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            {busy === "dry" ? "Running..." : "Dry Run"}
+          </Button>
+          <Button
+            variant="success"
+            size="sm"
+            onClick={() => {
+              if (window.confirm(`Run ${title}? This will update WordPress.`)) run(false);
+            }}
+            disabled={busy !== null}
+          >
+            <Play className="h-3.5 w-3.5" />
+            {busy === "run" ? "Running..." : "Run"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Codes Page ─────────────────────────────────────────────────────────────
+
+function CodesPage({ notify }) {
+  const articles = useQuery(api.articles.listArticles) ?? [];
+  const syncAction = useAction(api.syncCodes.syncCodes);
+  const resolveAction = useAction(api.resolveWordpressPostId.resolveWordpressPostId);
+  const saveArticle = useMutation(api.articles.saveArticle);
+  const [busy, setBusy] = useState({});
+  const [expanded, setExpanded] = useState(null);
+  const [editor, setEditor] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({});
+  const [sortMode, setSortMode] = useState("name_asc");
+  const deferredSearch = useDeferredValue(search);
+
+  function toggleFilter(key) {
+    setFilters((f) => {
+      const copy = { ...f };
+      if (copy[key]) delete copy[key];
+      else copy[key] = true;
+      return copy;
+    });
+  }
+
+  const needle = deferredSearch.trim().toLowerCase();
+  let filtered = articles;
+  if (needle) {
+    filtered = filtered.filter((a) =>
+      [a.gameName, a.sourceBeebomUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
+        .join(" ").toLowerCase().includes(needle),
+    );
+  }
+  // Apply filters
+  if (filters.hasSource) filtered = filtered.filter((a) => a.sourceBeebomUrl);
+  if (filters.noSource) filtered = filtered.filter((a) => !a.sourceBeebomUrl);
+  if (filters.hasTN) filtered = filtered.filter((a) => a.technerdinessArticleUrl);
+  if (filters.noTN) filtered = filtered.filter((a) => !a.technerdinessArticleUrl);
+  if (filters.hasGW) filtered = filtered.filter((a) => a.gamingwizeArticleUrl);
+  if (filters.noGW) filtered = filtered.filter((a) => !a.gamingwizeArticleUrl);
+  if (filters.tnNoPostId) filtered = filtered.filter((a) => a.technerdinessArticleUrl && !a.siteStates.technerdiness.wordpressPostId);
+  if (filters.gwNoPostId) filtered = filtered.filter((a) => a.gamingwizeArticleUrl && !a.siteStates.gamingwize.wordpressPostId);
+  if (filters.neverScraped) filtered = filtered.filter((a) => !a.lastScrapedAt);
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortMode) {
+      case "name_asc": return (a.gameName || "").localeCompare(b.gameName || "");
+      case "name_desc": return (b.gameName || "").localeCompare(a.gameName || "");
+      case "scraped_old": return (a.lastScrapedAt || "").localeCompare(b.lastScrapedAt || "");
+      case "scraped_new": return (b.lastScrapedAt || "").localeCompare(a.lastScrapedAt || "");
+      case "tn_sync_old": return (a.siteStates.technerdiness.lastWordpressSyncAt || "").localeCompare(b.siteStates.technerdiness.lastWordpressSyncAt || "");
+      case "tn_sync_new": return (b.siteStates.technerdiness.lastWordpressSyncAt || "").localeCompare(a.siteStates.technerdiness.lastWordpressSyncAt || "");
+      case "gw_sync_old": return (a.siteStates.gamingwize.lastWordpressSyncAt || "").localeCompare(b.siteStates.gamingwize.lastWordpressSyncAt || "");
+      case "gw_sync_new": return (b.siteStates.gamingwize.lastWordpressSyncAt || "").localeCompare(a.siteStates.gamingwize.lastWordpressSyncAt || "");
+      default: return 0;
+    }
+  });
+
+  async function runSync(article, dryRun) {
+    const key = `sync:${article._id}:${dryRun}`;
+    setBusy((p) => ({ ...p, [key]: true }));
+    const label = `${dryRun ? "Dry run" : "Sync"}: ${article.gameName}`;
+    try {
+      const result = await syncAction({
+        gameName: article.gameName,
+        dryRun: dryRun || undefined,
+      });
+      notify("success", label, result);
+    } catch (e) {
+      notify("error", label, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  }
+
+  async function runResolve(article) {
+    const key = `resolve:${article._id}`;
+    setBusy((p) => ({ ...p, [key]: true }));
+    try {
+      const result = await resolveAction({ articleId: article._id });
+      notify("success", `Resolve: ${article.gameName}`, result);
+    } catch (e) {
+      notify("error", `Resolve: ${article.gameName}`, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  }
+
+  async function runAllSync(dryRun) {
+    const key = `sync-all:${dryRun}`;
+    setBusy((p) => ({ ...p, [key]: true }));
+    const label = dryRun ? "Dry run: All Codes" : "Sync All Codes";
+    try {
+      const result = await syncAction({ dryRun: dryRun || undefined });
+      notify("success", label, result);
+    } catch (e) {
+      notify("error", label, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  }
+
+  function updateField(field, value) {
+    setEditor((e) => ({ ...e, [field]: value }));
+  }
+
+  const dup = editor ? findDuplicate(articles, editor) : null;
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (dup) return;
+    setSaving(true);
+    try {
+      await saveArticle({
+        id: editor.id || undefined,
+        gameName: editor.gameName || undefined,
+        sourceBeebomUrl: editor.sourceBeebomUrl || undefined,
+        technerdinessArticleUrl: editor.technerdinessArticleUrl || undefined,
+        gamingwizeArticleUrl: editor.gamingwizeArticleUrl || undefined,
+      });
+      notify("success", editor.id ? "Article updated" : "Article created");
+      setEditor(null);
+    } catch (err) {
+      notify("error", "Save failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const FILTERS = [
+    { key: "hasSource", label: "Has source" },
+    { key: "noSource", label: "No source" },
+    { key: "hasTN", label: "Has TN" },
+    { key: "noTN", label: "No TN" },
+    { key: "hasGW", label: "Has GW" },
+    { key: "noGW", label: "No GW" },
+    { key: "tnNoPostId", label: "TN missing post ID" },
+    { key: "gwNoPostId", label: "GW missing post ID" },
+    { key: "neverScraped", label: "Never scraped" },
+  ];
+
+  const SORTS = [
+    { v: "name_asc", l: "A-Z" },
+    { v: "name_desc", l: "Z-A" },
+    { v: "scraped_old", l: "Scraped ↑" },
+    { v: "scraped_new", l: "Scraped ↓" },
+    { v: "tn_sync_old", l: "TN sync ↑" },
+    { v: "tn_sync_new", l: "TN sync ↓" },
+    { v: "gw_sync_old", l: "GW sync ↑" },
+    { v: "gw_sync_new", l: "GW sync ↓" },
+  ];
+
+  const activeFilterCount = Object.keys(filters).length;
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Game Codes</h2>
+          <p className="text-muted-foreground">
+            {sorted.length} of {articles.length} articles
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setEditor(EMPTY_EDITOR)}>
+            <Plus className="h-3.5 w-3.5" /> Add Article
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runAllSync(true)}
+            disabled={busy["sync-all:true"]}
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Dry Run All
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              if (window.confirm("Sync all codes? This will update WordPress.")) runAllSync(false);
+            }}
+            disabled={busy["sync-all:false"]}
+          >
+            <Play className="h-3.5 w-3.5" />
+            Sync All
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search game name or URL..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <TabsList>
+          {SORTS.map((s) => (
+            <TabsTrigger key={s.v} value={s.v} activeValue={sortMode} onClick={setSortMode}>
+              {s.l}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => toggleFilter(f.key)}
+            className={cn(
+              "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+              filters[f.key]
+                ? "bg-primary text-primary-foreground border-primary"
+                : "text-muted-foreground border-border hover:text-foreground",
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+        {activeFilterCount > 0 && (
+          <button
+            onClick={() => setFilters({})}
+            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer ml-1"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-6">
+      <div className="flex-1 min-w-0 space-y-2">
+        {sorted.map((article) => {
+          const tn = article.siteStates.technerdiness;
+          const gw = article.siteStates.gamingwize;
+          const isExpanded = expanded === article._id;
+          const isBusy =
+            busy[`sync:${article._id}:true`] ||
+            busy[`sync:${article._id}:false`] ||
+            busy[`resolve:${article._id}`];
+
+          return (
+            <Card key={article._id}>
+              <div
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/30 transition-colors"
+                onClick={() => setExpanded(isExpanded ? null : article._id)}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Gamepad2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <p className="font-medium truncate">{article.gameName}</p>
+                  {article.sourceBeebomUrl ? (
+                    <Badge variant="success">Beebom</Badge>
+                  ) : (
+                    <Badge variant="outline">Beebom</Badge>
+                  )}
                 </div>
-
-                <div className="table-meta">
-                  <span>{visibleArticles.length} rows</span>
-                  <span>{formatDateTime(new Date().toISOString())}</span>
-                </div>
-
-                <div className="table-scroll">
-                  <table className="articles-table">
-                    <thead>
-                      <tr>
-                        <th>Game</th>
-                        <th>Status</th>
-                        <th>Beebom</th>
-                        <th>TN</th>
-                        <th>GW</th>
-                        <th>Updated</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleArticles.map((article) => (
-                        <ArticleRow
-                          key={article.id}
-                          article={article}
-                          isSelected={selectedArticleId === article.id}
-                          isBusy={Boolean(
-                            busyMap[`resolve:${article.id}`] ||
-                              busyMap[`sync:${article.id}:dry`] ||
-                              busyMap[`sync:${article.id}:real`],
-                          )}
-                          onEdit={openEditArticle}
-                          onResolve={runResolve}
-                          onSyncDryRun={(row) => runArticleSync(row, true)}
-                          onSyncReal={(row) => runArticleSync(row, false)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex gap-1.5">
+                    {tn.wordpressPostId ? (
+                      <Badge variant="success">TN #{tn.wordpressPostId}</Badge>
+                    ) : article.technerdinessArticleUrl ? (
+                      <Badge variant="destructive">TN !</Badge>
+                    ) : (
+                      <Badge variant="outline">TN -</Badge>
+                    )}
+                    {gw.wordpressPostId ? (
+                      <Badge variant="success">GW #{gw.wordpressPostId}</Badge>
+                    ) : article.gamingwizeArticleUrl ? (
+                      <Badge variant="destructive">GW !</Badge>
+                    ) : (
+                      <Badge variant="outline">GW -</Badge>
+                    )}
+                  </div>
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
                 </div>
               </div>
 
-              {editorOpen
-                ? (
-                  <EditorPanel
-                    editor={editor}
-                    onChange={updateEditorField}
-                    onClose={closeEditor}
-                    onSave={handleSaveArticle}
-                    isSaving={savingArticle}
-                    duplicateSuggestion={duplicateSuggestion}
-                    onOpenDuplicate={() =>
-                      openEditArticle(duplicateSuggestion.article)}
-                  />
-                )
-                : null}
-            </section>
-          )}
-      </main>
+              {isExpanded && (
+                <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
+                  <div className="grid gap-2 text-xs sm:grid-cols-3">
+                    <UrlDetail label="Beebom" url={article.sourceBeebomUrl} />
+                    <UrlDetail label="Tech Nerdiness" url={article.technerdinessArticleUrl} />
+                    <UrlDetail label="Gaming Wize" url={article.gamingwizeArticleUrl} />
+                  </div>
+                  <div className="grid gap-2 text-xs sm:grid-cols-3">
+                    <div>
+                      <span className="text-muted-foreground">Last scraped:</span>{" "}
+                      {formatDateTime(article.lastScrapedAt)}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">TN last sync:</span>{" "}
+                      {formatDateTime(tn.lastWordpressSyncAt)}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">GW last sync:</span>{" "}
+                      {formatDateTime(gw.lastWordpressSyncAt)}
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={(e) => { e.stopPropagation(); setEditor(mapArticleToEditor(article)); }}
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={(e) => { e.stopPropagation(); runSync(article, true); }}
+                      disabled={isBusy}
+                    >
+                      <FlaskConical className="h-3 w-3" /> Dry Run
+                    </Button>
+                    <Button
+                      variant="success"
+                      size="xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Sync ${article.gameName}?`)) runSync(article, false);
+                      }}
+                      disabled={isBusy}
+                    >
+                      <Play className="h-3 w-3" /> Sync
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={(e) => { e.stopPropagation(); runResolve(article); }}
+                      disabled={isBusy}
+                    >
+                      <Link2 className="h-3 w-3" /> Resolve WP IDs
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+        {sorted.length === 0 && (
+          <p className="text-center text-muted-foreground py-8">No matching articles found.</p>
+        )}
+      </div>
+
+      {/* Editor Sidebar */}
+      {editor && (
+        <Card className="w-80 shrink-0 self-start sticky top-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">
+                {editor.id ? "Edit Article" : "New Article"}
+              </CardTitle>
+              <Button variant="ghost" size="icon-sm" onClick={() => setEditor(null)}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {dup && (
+              <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+                <p>
+                  This {dup.label} already exists on{" "}
+                  <strong>{dup.article.gameName}</strong>.
+                </p>
+              </div>
+            )}
+            <form onSubmit={handleSave} className="space-y-3">
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Game Name</span>
+                <Input
+                  value={editor.gameName}
+                  onChange={(e) => updateField("gameName", e.target.value)}
+                  placeholder="Anime Vanguards"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Beebom URL</span>
+                <Input
+                  value={editor.sourceBeebomUrl}
+                  onChange={(e) => updateField("sourceBeebomUrl", e.target.value)}
+                  placeholder="https://beebom.com/..."
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Tech Nerdiness URL</span>
+                <Input
+                  value={editor.technerdinessArticleUrl}
+                  onChange={(e) => updateField("technerdinessArticleUrl", e.target.value)}
+                  placeholder="https://www.technerdiness.com/..."
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Gaming Wize URL</span>
+                <Input
+                  value={editor.gamingwizeArticleUrl}
+                  onChange={(e) => updateField("gamingwizeArticleUrl", e.target.value)}
+                  placeholder="https://www.gamingwize.com/..."
+                />
+              </label>
+              <Button type="submit" size="sm" className="w-full" disabled={saving || !!dup}>
+                {saving ? "Saving..." : editor.id ? "Save Changes" : "Create Article"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+      </div>
+    </>
+  );
+}
+
+function UrlDetail({ label, url }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-muted-foreground">{label}:</span>{" "}
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-info hover:underline inline-flex items-center gap-1"
+        >
+          {truncate(url, 40)}
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </a>
+      ) : (
+        <span className="text-muted-foreground/50">Not set</span>
+      )}
     </div>
+  );
+}
+
+// ── Puzzles Page ───────────────────────────────────────────────────────────
+
+function PuzzlesPage({ notify }) {
+  const syncNyt = useAction(api.syncNytPuzzles.syncNytPuzzles);
+  const syncLetroso = useAction(api.syncLetroso.syncLetroso);
+  const [busy, setBusy] = useState({});
+
+  async function runPuzzle(key, label, action, args) {
+    setBusy((p) => ({ ...p, [key]: true }));
+    try {
+      const result = await action(args);
+      notify("success", label, result);
+    } catch (e) {
+      notify("error", label, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  }
+
+  const puzzles = [
+    {
+      id: "wordle",
+      title: "Wordle",
+      description: "Fetch today's Wordle answer from NYT and update the WordPress article.",
+      icon: "W",
+      color: "bg-emerald-500/15 text-emerald-400",
+    },
+    {
+      id: "connections",
+      title: "Connections",
+      description: "Fetch today's Connections categories and update WordPress.",
+      icon: "C",
+      color: "bg-purple-500/15 text-purple-400",
+    },
+    {
+      id: "strands",
+      title: "Strands",
+      description: "Fetch today's Strands spangram and theme words, update WordPress.",
+      icon: "S",
+      color: "bg-blue-500/15 text-blue-400",
+    },
+    {
+      id: "letroso",
+      title: "Letroso",
+      description: "Scrape today's Letroso answer and update the answer history on WordPress.",
+      icon: "L",
+      color: "bg-amber-500/15 text-amber-400",
+    },
+  ];
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Puzzles</h2>
+          <p className="text-muted-foreground">
+            Run individual puzzle syncs or batch all NYT puzzles together.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              runPuzzle("nyt-all-dry", "Dry run: All NYT", syncNyt, { dryRun: true })
+            }
+            disabled={busy["nyt-all-dry"]}
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Dry All NYT
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              if (window.confirm("Sync all NYT puzzles?"))
+                runPuzzle("nyt-all", "Sync All NYT", syncNyt, {});
+            }}
+            disabled={busy["nyt-all"]}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Sync All NYT
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {puzzles.map((p) => {
+          const isNyt = p.id !== "letroso";
+          const action = isNyt ? syncNyt : syncLetroso;
+          const dryArgs = isNyt
+            ? { puzzles: [p.id], dryRun: true }
+            : { dryRun: true };
+          const runArgs = isNyt ? { puzzles: [p.id] } : {};
+          const dryKey = `${p.id}-dry`;
+          const runKey = `${p.id}-run`;
+
+          return (
+            <Card key={p.id}>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-lg font-bold text-lg",
+                      p.color,
+                    )}
+                  >
+                    {p.icon}
+                  </div>
+                  <div>
+                    <CardTitle>{p.title}</CardTitle>
+                    <CardDescription className="mt-0.5">{p.description}</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runPuzzle(dryKey, `Dry run: ${p.title}`, action, dryArgs)}
+                    disabled={busy[dryKey]}
+                  >
+                    <FlaskConical className="h-3.5 w-3.5" />
+                    {busy[dryKey] ? "Running..." : "Dry Run"}
+                  </Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm(`Sync ${p.title}? This will update WordPress.`))
+                        runPuzzle(runKey, `Sync: ${p.title}`, action, runArgs);
+                    }}
+                    disabled={busy[runKey]}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    {busy[runKey] ? "Running..." : "Run"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+// ── Articles Page ──────────────────────────────────────────────────────────
+
+function ArticlesPage({ notify }) {
+  const articles = useQuery(api.articles.listArticles) ?? [];
+  const saveArticle = useMutation(api.articles.saveArticle);
+  const resolveAction = useAction(api.resolveWordpressPostId.resolveWordpressPostId);
+
+  const [editor, setEditor] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState("game_asc");
+  const [busy, setBusy] = useState({});
+  const deferredSearch = useDeferredValue(search);
+
+  const needle = deferredSearch.trim().toLowerCase();
+  const filtered = needle
+    ? articles.filter((a) =>
+        [a.gameName, a.sourceBeebomUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
+      )
+    : articles;
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortMode === "game_asc") return (a.gameName || "").localeCompare(b.gameName || "");
+    if (sortMode === "game_desc") return (b.gameName || "").localeCompare(a.gameName || "");
+    return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+  });
+
+  function updateField(field, value) {
+    setEditor((e) => ({ ...e, [field]: value }));
+  }
+
+  const dup = editor ? findDuplicate(articles, editor) : null;
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (dup) return;
+    setSaving(true);
+    try {
+      const id = await saveArticle({
+        id: editor.id || undefined,
+        gameName: editor.gameName || undefined,
+        sourceBeebomUrl: editor.sourceBeebomUrl || undefined,
+        technerdinessArticleUrl: editor.technerdinessArticleUrl || undefined,
+        gamingwizeArticleUrl: editor.gamingwizeArticleUrl || undefined,
+      });
+      notify("success", editor.id ? "Article updated" : "Article created", { id });
+      setEditor(null);
+    } catch (err) {
+      notify("error", "Save failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function runResolve(article) {
+    const key = `resolve:${article._id}`;
+    setBusy((p) => ({ ...p, [key]: true }));
+    try {
+      const result = await resolveAction({ articleId: article._id });
+      notify("success", `Resolve: ${article.gameName}`, result);
+    } catch (e) {
+      notify("error", `Resolve: ${article.gameName}`, e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Articles</h2>
+          <p className="text-muted-foreground">{articles.length} code article mappings</p>
+        </div>
+        <Button size="sm" onClick={() => setEditor(EMPTY_EDITOR)}>
+          <Plus className="h-3.5 w-3.5" /> Add Article
+        </Button>
+      </div>
+
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <TabsList>
+          {[
+            { v: "game_asc", l: "A-Z" },
+            { v: "game_desc", l: "Z-A" },
+            { v: "updated", l: "Recent" },
+          ].map((s) => (
+            <TabsTrigger
+              key={s.v}
+              value={s.v}
+              activeValue={sortMode}
+              onClick={setSortMode}
+            >
+              {s.l}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Table */}
+        <div className="flex-1 min-w-0">
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="p-3 font-medium">Game</th>
+                    <th className="p-3 font-medium">Beebom</th>
+                    <th className="p-3 font-medium">TN</th>
+                    <th className="p-3 font-medium">GW</th>
+                    <th className="p-3 font-medium">Updated</th>
+                    <th className="p-3 font-medium w-24"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((a) => {
+                    const tn = a.siteStates.technerdiness;
+                    const gw = a.siteStates.gamingwize;
+                    return (
+                      <tr
+                        key={a._id}
+                        className={cn(
+                          "border-b transition-colors hover:bg-muted/30",
+                          editor?.id === a._id && "bg-muted/40",
+                        )}
+                      >
+                        <td className="p-3">
+                          <div className="font-medium">{a.gameName}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{a._id}</div>
+                        </td>
+                        <td className="p-3">
+                          {a.sourceBeebomUrl ? (
+                            <a
+                              href={a.sourceBeebomUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-info hover:underline text-xs"
+                            >
+                              {truncate(a.sourceBeebomUrl, 30)}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground/40">-</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-0.5">
+                            {a.technerdinessArticleUrl ? (
+                              <a
+                                href={a.technerdinessArticleUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-info hover:underline text-xs block"
+                              >
+                                {truncate(a.technerdinessArticleUrl, 30)}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground/40 text-xs">-</span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              #{tn.wordpressPostId || "-"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-0.5">
+                            {a.gamingwizeArticleUrl ? (
+                              <a
+                                href={a.gamingwizeArticleUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-info hover:underline text-xs block"
+                              >
+                                {truncate(a.gamingwizeArticleUrl, 30)}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground/40 text-xs">-</span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              #{gw.wordpressPostId || "-"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDateTime(a.updatedAt)}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setEditor(mapArticleToEditor(a))}
+                              title="Edit"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => runResolve(a)}
+                              disabled={busy[`resolve:${a._id}`]}
+                              title="Resolve WP IDs"
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+
+        {/* Editor */}
+        {editor && (
+          <Card className="w-80 shrink-0 self-start sticky top-6">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm">
+                  {editor.id ? "Edit Article" : "New Article"}
+                </CardTitle>
+                <Button variant="ghost" size="icon-sm" onClick={() => setEditor(null)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {dup && (
+                <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+                  <p>
+                    This {dup.label} already exists on{" "}
+                    <strong>{dup.article.gameName}</strong>.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="mt-2"
+                    onClick={() => setEditor(mapArticleToEditor(dup.article))}
+                  >
+                    Edit Existing
+                  </Button>
+                </div>
+              )}
+              <form onSubmit={handleSave} className="space-y-3">
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">Game Name</span>
+                  <Input
+                    value={editor.gameName}
+                    onChange={(e) => updateField("gameName", e.target.value)}
+                    placeholder="Anime Vanguards"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">Beebom URL</span>
+                  <Input
+                    value={editor.sourceBeebomUrl}
+                    onChange={(e) => updateField("sourceBeebomUrl", e.target.value)}
+                    placeholder="https://beebom.com/..."
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">Tech Nerdiness URL</span>
+                  <Input
+                    value={editor.technerdinessArticleUrl}
+                    onChange={(e) => updateField("technerdinessArticleUrl", e.target.value)}
+                    placeholder="https://www.technerdiness.com/..."
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">Gaming Wize URL</span>
+                  <Input
+                    value={editor.gamingwizeArticleUrl}
+                    onChange={(e) => updateField("gamingwizeArticleUrl", e.target.value)}
+                    placeholder="https://www.gamingwize.com/..."
+                  />
+                </label>
+                <Button type="submit" size="sm" className="w-full" disabled={saving || !!dup}>
+                  {saving ? "Saving..." : editor.id ? "Save Changes" : "Create Article"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </>
   );
 }

@@ -24,18 +24,9 @@ Then open the local Vite URL in your browser.
 
 Create `admin/.env` from `admin/.env.example` and set:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_SERVICE_ROLE_KEY`
-- `VITE_SYNC_CODES_SECRET`
-- `VITE_RESOLVE_SECRET`
-
-Optional:
-
-- `VITE_SYNC_LETROSO_SECRET`
-- `VITE_NYT_PUZZLES_SECRET`
+- `VITE_CONVEX_URL` — your Convex deployment URL
 
 ## Important
 
 - This panel is intended for local or private internal use
-- Vite exposes `VITE_` env values to the browser bundle
-- Do not deploy this publicly with admin secrets
+- Do not deploy this publicly without authentication
