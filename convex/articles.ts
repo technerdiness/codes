@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // listArticles: Returns all articles joined with their WordPress state from both site tables.
 
@@ -70,25 +71,46 @@ export const saveArticle = mutation({
   },
   handler: async (ctx, args) => {
     const now = new Date().toISOString();
+    const newTN = args.technerdinessArticleUrl || undefined;
+    const newGW = args.gamingwizeArticleUrl || undefined;
+    let articleId;
+    let shouldResolve = false;
+
     if (args.id) {
+      const existing = await ctx.db.get(args.id);
       await ctx.db.patch(args.id, {
         gameName: args.gameName,
         ...(args.sourceBeebomUrl !== undefined && { sourceBeebomUrl: args.sourceBeebomUrl || undefined }),
-        ...(args.technerdinessArticleUrl !== undefined && { technerdinessArticleUrl: args.technerdinessArticleUrl || undefined }),
-        ...(args.gamingwizeArticleUrl !== undefined && { gamingwizeArticleUrl: args.gamingwizeArticleUrl || undefined }),
+        ...(args.technerdinessArticleUrl !== undefined && { technerdinessArticleUrl: newTN }),
+        ...(args.gamingwizeArticleUrl !== undefined && { gamingwizeArticleUrl: newGW }),
         updatedAt: now,
       });
-      return args.id;
+      articleId = args.id;
+      // Resolve if TN or GW URLs changed
+      if (existing) {
+        const tnChanged = args.technerdinessArticleUrl !== undefined && (existing.technerdinessArticleUrl || undefined) !== newTN;
+        const gwChanged = args.gamingwizeArticleUrl !== undefined && (existing.gamingwizeArticleUrl || undefined) !== newGW;
+        shouldResolve = tnChanged || gwChanged;
+      }
     } else {
-      const id = await ctx.db.insert("articles", {
+      articleId = await ctx.db.insert("articles", {
         gameName: args.gameName,
         sourceBeebomUrl: args.sourceBeebomUrl || undefined,
-        technerdinessArticleUrl: args.technerdinessArticleUrl || undefined,
-        gamingwizeArticleUrl: args.gamingwizeArticleUrl || undefined,
+        technerdinessArticleUrl: newTN,
+        gamingwizeArticleUrl: newGW,
         updatedAt: now,
       });
-      return id;
+      // Resolve if new article has any WP URLs
+      shouldResolve = !!(newTN || newGW);
     }
+
+    if (shouldResolve) {
+      await ctx.scheduler.runAfter(0, internal.resolveWordpressPostId.run, {
+        articleId,
+      });
+    }
+
+    return articleId;
   },
 });
 
