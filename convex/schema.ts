@@ -8,6 +8,7 @@ export default defineSchema({
   articles: defineTable({
     gameName: v.string(),
     sourceBeebomUrl: v.optional(v.string()),
+    sourceTechwiserUrl: v.optional(v.string()),
     technerdinessArticleUrl: v.optional(v.string()),
     gamingwizeArticleUrl: v.optional(v.string()),
     lastScrapedAt: v.optional(v.string()),
@@ -15,6 +16,7 @@ export default defineSchema({
   })
     .index("by_game_name", ["gameName"])
     .index("by_source_beebom_url", ["sourceBeebomUrl"])
+    .index("by_source_techwiser_url", ["sourceTechwiserUrl"])
     .index("by_technerdiness_url", ["technerdinessArticleUrl"])
     .index("by_gamingwize_url", ["gamingwizeArticleUrl"]),
 

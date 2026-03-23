@@ -54,6 +54,7 @@ const EMPTY_EDITOR = {
   id: "",
   gameName: "",
   sourceBeebomUrl: "",
+  sourceTechwiserUrl: "",
   technerdinessArticleUrl: "",
   gamingwizeArticleUrl: "",
 };
@@ -69,6 +70,7 @@ function mapArticleToEditor(a) {
     id: a._id,
     gameName: a.gameName || "",
     sourceBeebomUrl: a.sourceBeebomUrl || "",
+    sourceTechwiserUrl: a.sourceTechwiserUrl || "",
     technerdinessArticleUrl: a.technerdinessArticleUrl || "",
     gamingwizeArticleUrl: a.gamingwizeArticleUrl || "",
   };
@@ -77,6 +79,7 @@ function mapArticleToEditor(a) {
 function findDuplicate(articles, editor) {
   const checks = [
     { key: "sourceBeebomUrl", val: editor.sourceBeebomUrl, label: "Beebom URL" },
+    { key: "sourceTechwiserUrl", val: editor.sourceTechwiserUrl, label: "TechWiser URL" },
     { key: "technerdinessArticleUrl", val: editor.technerdinessArticleUrl, label: "TN URL" },
     { key: "gamingwizeArticleUrl", val: editor.gamingwizeArticleUrl, label: "GW URL" },
   ];
@@ -574,13 +577,14 @@ function CodesPage({ notify }) {
   let filtered = articles;
   if (needle) {
     filtered = filtered.filter((a) =>
-      [a.gameName, a.sourceBeebomUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
+      [a.gameName, a.sourceBeebomUrl, a.sourceTechwiserUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
         .join(" ").toLowerCase().includes(needle),
     );
   }
   // Apply filters
-  if (filters.hasSource) filtered = filtered.filter((a) => a.sourceBeebomUrl);
-  if (filters.noSource) filtered = filtered.filter((a) => !a.sourceBeebomUrl);
+  if (filters.hasBeebom) filtered = filtered.filter((a) => a.sourceBeebomUrl);
+  if (filters.hasTW) filtered = filtered.filter((a) => a.sourceTechwiserUrl);
+  if (filters.noSource) filtered = filtered.filter((a) => !a.sourceBeebomUrl && !a.sourceTechwiserUrl);
   if (filters.hasTN) filtered = filtered.filter((a) => a.technerdinessArticleUrl);
   if (filters.noTN) filtered = filtered.filter((a) => !a.technerdinessArticleUrl);
   if (filters.hasGW) filtered = filtered.filter((a) => a.gamingwizeArticleUrl);
@@ -663,6 +667,7 @@ function CodesPage({ notify }) {
         id: editor.id || undefined,
         gameName: editor.gameName || undefined,
         sourceBeebomUrl: editor.sourceBeebomUrl || undefined,
+        sourceTechwiserUrl: editor.sourceTechwiserUrl || undefined,
         technerdinessArticleUrl: editor.technerdinessArticleUrl || undefined,
         gamingwizeArticleUrl: editor.gamingwizeArticleUrl || undefined,
       });
@@ -676,7 +681,8 @@ function CodesPage({ notify }) {
   }
 
   const FILTERS = [
-    { key: "hasSource", label: "Has source" },
+    { key: "hasBeebom", label: "Has Beebom" },
+    { key: "hasTW", label: "Has TechWiser" },
     { key: "noSource", label: "No source" },
     { key: "hasTN", label: "Has TN" },
     { key: "noTN", label: "No TN" },
@@ -806,6 +812,11 @@ function CodesPage({ notify }) {
                   ) : (
                     <Badge variant="outline">Beebom</Badge>
                   )}
+                  {article.sourceTechwiserUrl ? (
+                    <Badge variant="success">TW</Badge>
+                  ) : (
+                    <Badge variant="outline">TW</Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="flex gap-1.5">
@@ -834,8 +845,9 @@ function CodesPage({ notify }) {
 
               {isExpanded && (
                 <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
-                  <div className="grid gap-2 text-xs sm:grid-cols-3">
+                  <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                     <UrlDetail label="Beebom" url={article.sourceBeebomUrl} />
+                    <UrlDetail label="TechWiser" url={article.sourceTechwiserUrl} />
                     <UrlDetail label="Tech Nerdiness" url={article.technerdinessArticleUrl} />
                     <UrlDetail label="Gaming Wize" url={article.gamingwizeArticleUrl} />
                   </div>
@@ -937,6 +949,14 @@ function CodesPage({ notify }) {
                   value={editor.sourceBeebomUrl}
                   onChange={(e) => updateField("sourceBeebomUrl", e.target.value)}
                   placeholder="https://beebom.com/..."
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">TechWiser URL</span>
+                <Input
+                  value={editor.sourceTechwiserUrl}
+                  onChange={(e) => updateField("sourceTechwiserUrl", e.target.value)}
+                  placeholder="https://techwiser.com/..."
                 />
               </label>
               <label className="block space-y-1">
@@ -1152,7 +1172,7 @@ function ArticlesPage({ notify }) {
   const needle = deferredSearch.trim().toLowerCase();
   const filtered = needle
     ? articles.filter((a) =>
-        [a.gameName, a.sourceBeebomUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
+        [a.gameName, a.sourceBeebomUrl, a.sourceTechwiserUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
           .join(" ")
           .toLowerCase()
           .includes(needle),
@@ -1180,6 +1200,7 @@ function ArticlesPage({ notify }) {
         id: editor.id || undefined,
         gameName: editor.gameName || undefined,
         sourceBeebomUrl: editor.sourceBeebomUrl || undefined,
+        sourceTechwiserUrl: editor.sourceTechwiserUrl || undefined,
         technerdinessArticleUrl: editor.technerdinessArticleUrl || undefined,
         gamingwizeArticleUrl: editor.gamingwizeArticleUrl || undefined,
       });
@@ -1407,6 +1428,14 @@ function ArticlesPage({ notify }) {
                     value={editor.sourceBeebomUrl}
                     onChange={(e) => updateField("sourceBeebomUrl", e.target.value)}
                     placeholder="https://beebom.com/..."
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">TechWiser URL</span>
+                  <Input
+                    value={editor.sourceTechwiserUrl}
+                    onChange={(e) => updateField("sourceTechwiserUrl", e.target.value)}
+                    placeholder="https://www.techwiser.com/..."
                   />
                 </label>
                 <label className="block space-y-1">

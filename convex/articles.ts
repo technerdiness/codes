@@ -66,6 +66,7 @@ export const saveArticle = mutation({
     id: v.optional(v.id("articles")),
     gameName: v.string(),
     sourceBeebomUrl: v.optional(v.string()),
+    sourceTechwiserUrl: v.optional(v.string()),
     technerdinessArticleUrl: v.optional(v.string()),
     gamingwizeArticleUrl: v.optional(v.string()),
   },
@@ -81,6 +82,7 @@ export const saveArticle = mutation({
       await ctx.db.patch(args.id, {
         gameName: args.gameName,
         ...(args.sourceBeebomUrl !== undefined && { sourceBeebomUrl: args.sourceBeebomUrl || undefined }),
+        ...(args.sourceTechwiserUrl !== undefined && { sourceTechwiserUrl: args.sourceTechwiserUrl || undefined }),
         ...(args.technerdinessArticleUrl !== undefined && { technerdinessArticleUrl: newTN }),
         ...(args.gamingwizeArticleUrl !== undefined && { gamingwizeArticleUrl: newGW }),
         updatedAt: now,
@@ -96,6 +98,7 @@ export const saveArticle = mutation({
       articleId = await ctx.db.insert("articles", {
         gameName: args.gameName,
         sourceBeebomUrl: args.sourceBeebomUrl || undefined,
+        sourceTechwiserUrl: args.sourceTechwiserUrl || undefined,
         technerdinessArticleUrl: newTN,
         gamingwizeArticleUrl: newGW,
         updatedAt: now,

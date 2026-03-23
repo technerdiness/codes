@@ -17,6 +17,7 @@ import type * as http from "../http.js";
 import type * as letrosoAnswers from "../letrosoAnswers.js";
 import type * as lib_providers_beebom from "../lib/providers/beebom.js";
 import type * as lib_providers_beebomLetroso from "../lib/providers/beebomLetroso.js";
+import type * as lib_providers_techwiser from "../lib/providers/techwiser.js";
 import type * as lib_types from "../lib/types.js";
 import type * as lib_wordpress from "../lib/wordpress.js";
 import type * as nytAnswers from "../nytAnswers.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   letrosoAnswers: typeof letrosoAnswers;
   "lib/providers/beebom": typeof lib_providers_beebom;
   "lib/providers/beebomLetroso": typeof lib_providers_beebomLetroso;
+  "lib/providers/techwiser": typeof lib_providers_techwiser;
   "lib/types": typeof lib_types;
   "lib/wordpress": typeof lib_wordpress;
   nytAnswers: typeof nytAnswers;

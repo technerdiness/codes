@@ -1,4 +1,4 @@
-export type ScrapeProvider = "beebom";
+export type ScrapeProvider = "beebom" | "techwiser";
 export type WordPressSiteKey = "technerdiness" | "gamingwize";
 
 export interface ScrapedCode {

@@ -12,7 +12,7 @@ export const listArticlesForSync = internalQuery({
   args: { gameName: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     let articles = await ctx.db.query("articles").collect();
-    articles = articles.filter((a) => a.sourceBeebomUrl);
+    articles = articles.filter((a) => a.sourceBeebomUrl || a.sourceTechwiserUrl);
     if (args.gameName) {
       articles = articles.filter((a) => a.gameName === args.gameName);
     }
@@ -33,7 +33,8 @@ export const listArticlesForSync = internalQuery({
       result.push({
         articleId: article._id,
         gameName: article.gameName,
-        sourceBeebomUrl: article.sourceBeebomUrl!,
+        sourceBeebomUrl: article.sourceBeebomUrl ?? null,
+        sourceTechwiserUrl: article.sourceTechwiserUrl ?? null,
         lastScrapedAt: article.lastScrapedAt ?? null,
         siteStates: {
           technerdiness: {
