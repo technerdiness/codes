@@ -561,7 +561,8 @@ function CodesPage({ notify }) {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({});
-  const [sortMode, setSortMode] = useState("name_asc");
+  const [sortMode, setSortMode] = useState("created_new");
+  const [showFilters, setShowFilters] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
   function toggleFilter(key) {
@@ -583,7 +584,9 @@ function CodesPage({ notify }) {
   }
   // Apply filters
   if (filters.hasBeebom) filtered = filtered.filter((a) => a.sourceBeebomUrl);
+  if (filters.noBeebom) filtered = filtered.filter((a) => !a.sourceBeebomUrl);
   if (filters.hasTW) filtered = filtered.filter((a) => a.sourceTechwiserUrl);
+  if (filters.noTW) filtered = filtered.filter((a) => !a.sourceTechwiserUrl);
   if (filters.noSource) filtered = filtered.filter((a) => !a.sourceBeebomUrl && !a.sourceTechwiserUrl);
   if (filters.hasTN) filtered = filtered.filter((a) => a.technerdinessArticleUrl);
   if (filters.noTN) filtered = filtered.filter((a) => !a.technerdinessArticleUrl);
@@ -596,6 +599,8 @@ function CodesPage({ notify }) {
   // Sort
   const sorted = [...filtered].sort((a, b) => {
     switch (sortMode) {
+      case "created_new": return (b._creationTime || 0) - (a._creationTime || 0);
+      case "created_old": return (a._creationTime || 0) - (b._creationTime || 0);
       case "name_asc": return (a.gameName || "").localeCompare(b.gameName || "");
       case "name_desc": return (b.gameName || "").localeCompare(a.gameName || "");
       case "scraped_old": return (a.lastScrapedAt || "").localeCompare(b.lastScrapedAt || "");
@@ -680,20 +685,22 @@ function CodesPage({ notify }) {
     }
   }
 
-  const FILTERS = [
-    { key: "hasBeebom", label: "Has Beebom" },
-    { key: "hasTW", label: "Has TechWiser" },
-    { key: "noSource", label: "No source" },
-    { key: "hasTN", label: "Has TN" },
-    { key: "noTN", label: "No TN" },
-    { key: "hasGW", label: "Has GW" },
-    { key: "noGW", label: "No GW" },
+  const FILTER_GROUPS = [
+    { label: "Beebom", hasKey: "hasBeebom", noKey: "noBeebom" },
+    { label: "TechWiser", hasKey: "hasTW", noKey: "noTW" },
+    { label: "Tech Nerdiness", hasKey: "hasTN", noKey: "noTN" },
+    { label: "Gaming Wize", hasKey: "hasGW", noKey: "noGW" },
+  ];
+  const FILTER_EXTRAS = [
+    { key: "noSource", label: "No source at all" },
     { key: "tnNoPostId", label: "TN missing post ID" },
     { key: "gwNoPostId", label: "GW missing post ID" },
     { key: "neverScraped", label: "Never scraped" },
   ];
 
   const SORTS = [
+    { v: "created_new", l: "Newest" },
+    { v: "created_old", l: "Oldest" },
     { v: "name_asc", l: "A-Z" },
     { v: "name_desc", l: "Z-A" },
     { v: "scraped_old", l: "Scraped ↑" },
@@ -758,33 +765,88 @@ function CodesPage({ notify }) {
             </TabsTrigger>
           ))}
         </TabsList>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        {FILTERS.map((f) => (
+        <div className="relative">
           <button
-            key={f.key}
-            onClick={() => toggleFilter(f.key)}
+            onClick={() => setShowFilters((v) => !v)}
             className={cn(
-              "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer",
-              filters[f.key]
+              "inline-flex items-center justify-center rounded-md border h-9 w-9 transition-colors cursor-pointer",
+              activeFilterCount > 0
                 ? "bg-primary text-primary-foreground border-primary"
-                : "text-muted-foreground border-border hover:text-foreground",
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-accent",
             )}
           >
-            {f.label}
+            <SlidersHorizontal className="h-4 w-4" />
           </button>
-        ))}
-        {activeFilterCount > 0 && (
-          <button
-            onClick={() => setFilters({})}
-            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer ml-1"
-          >
-            Clear all
-          </button>
-        )}
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+          {showFilters && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowFilters(false)} />
+              <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-lg border bg-popover p-4 shadow-lg space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Filters</span>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => setFilters({})}
+                      className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                {FILTER_GROUPS.map((g) => (
+                  <div key={g.label} className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">{g.label}</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => toggleFilter(g.hasKey)}
+                        className={cn(
+                          "flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors cursor-pointer text-center",
+                          filters[g.hasKey]
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "text-muted-foreground border-border hover:text-foreground",
+                        )}
+                      >
+                        Has
+                      </button>
+                      <button
+                        onClick={() => toggleFilter(g.noKey)}
+                        className={cn(
+                          "flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors cursor-pointer text-center",
+                          filters[g.noKey]
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "text-muted-foreground border-border hover:text-foreground",
+                        )}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <Separator />
+                <div className="space-y-1.5">
+                  {FILTER_EXTRAS.map((f) => (
+                    <button
+                      key={f.key}
+                      onClick={() => toggleFilter(f.key)}
+                      className={cn(
+                        "w-full rounded-md border px-2 py-1 text-xs font-medium transition-colors cursor-pointer text-left",
+                        filters[f.key]
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "text-muted-foreground border-border hover:text-foreground",
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-6">
