@@ -1035,6 +1035,14 @@ function CodesPage({ notify }) {
                   This {dup.label} already exists on{" "}
                   <strong>{dup.article.gameName}</strong>.
                 </p>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="mt-2"
+                  onClick={() => setEditor(mapArticleToEditor(dup.article))}
+                >
+                  Edit Existing
+                </Button>
               </div>
             )}
             <form onSubmit={handleSave} className="space-y-3">
