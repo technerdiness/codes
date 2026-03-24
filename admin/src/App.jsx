@@ -28,7 +28,6 @@ import {
   Pencil,
   Link2,
   Zap,
-  BookOpen,
   Puzzle,
   LetterText,
   Gamepad2,
@@ -47,7 +46,6 @@ const NAV = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "codes", label: "Game Codes", icon: Gamepad2 },
   { id: "puzzles", label: "Puzzles", icon: Puzzle },
-  { id: "articles", label: "Articles", icon: BookOpen },
 ];
 
 const EMPTY_EDITOR = {
@@ -74,6 +72,24 @@ function mapArticleToEditor(a) {
     technerdinessArticleUrl: a.technerdinessArticleUrl || "",
     gamingwizeArticleUrl: a.gamingwizeArticleUrl || "",
   };
+}
+
+function gameNameFromUrl(url) {
+  try {
+    const { pathname } = new URL(url.trim());
+    // Get last meaningful segment (e.g. "/roblox/tap-simulator-codes/" → "tap-simulator-codes")
+    const segments = pathname.split("/").filter(Boolean);
+    const slug = segments[segments.length - 1] || "";
+    // Remove trailing "-codes" and convert hyphens to title case
+    const clean = slug.replace(/-codes$/, "");
+    if (!clean) return "";
+    return clean
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  } catch {
+    return "";
+  }
 }
 
 function findDuplicate(articles, editor) {
@@ -396,7 +412,7 @@ function Dashboard() {
           {view === "overview" && <OverviewPage notify={notify} />}
           {view === "codes" && <CodesPage notify={notify} />}
           {view === "puzzles" && <PuzzlesPage notify={notify} />}
-          {view === "articles" && <ArticlesPage notify={notify} />}
+          {/* Articles tab removed — Game Codes handles everything */}
         </div>
       </main>
 
@@ -657,8 +673,33 @@ function CodesPage({ notify }) {
     }
   }
 
+  // URL fields in priority order for auto-detecting game name
+  const URL_FIELDS_PRIORITY = [
+    "gamingwizeArticleUrl",
+    "technerdinessArticleUrl",
+    "sourceBeebomUrl",
+    "sourceTechwiserUrl",
+  ];
+
   function updateField(field, value) {
-    setEditor((e) => ({ ...e, [field]: value }));
+    setEditor((prev) => {
+      const next = { ...prev, [field]: value };
+      if (URL_FIELDS_PRIORITY.includes(field) && value.trim()) {
+        if (!next.gameName.trim()) {
+          for (const f of URL_FIELDS_PRIORITY) {
+            const url = next[f]?.trim();
+            if (url) {
+              const derived = gameNameFromUrl(url);
+              if (derived) {
+                next.gameName = derived;
+                break;
+              }
+            }
+          }
+        }
+      }
+      return next;
+    });
   }
 
   const dup = editor ? findDuplicate(articles, editor) : null;
@@ -1217,313 +1258,3 @@ function PuzzlesPage({ notify }) {
   );
 }
 
-// ── Articles Page ──────────────────────────────────────────────────────────
-
-function ArticlesPage({ notify }) {
-  const articles = useQuery(api.articles.listArticles) ?? [];
-  const saveArticle = useMutation(api.articles.saveArticle);
-  const resolveAction = useAction(api.resolveWordpressPostId.resolveWordpressPostId);
-
-  const [editor, setEditor] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState("");
-  const [sortMode, setSortMode] = useState("game_asc");
-  const [busy, setBusy] = useState({});
-  const deferredSearch = useDeferredValue(search);
-
-  const needle = deferredSearch.trim().toLowerCase();
-  const filtered = needle
-    ? articles.filter((a) =>
-        [a.gameName, a.sourceBeebomUrl, a.sourceTechwiserUrl, a.technerdinessArticleUrl, a.gamingwizeArticleUrl]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
-      )
-    : articles;
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === "game_asc") return (a.gameName || "").localeCompare(b.gameName || "");
-    if (sortMode === "game_desc") return (b.gameName || "").localeCompare(a.gameName || "");
-    return (b.updatedAt || "").localeCompare(a.updatedAt || "");
-  });
-
-  function updateField(field, value) {
-    setEditor((e) => ({ ...e, [field]: value }));
-  }
-
-  const dup = editor ? findDuplicate(articles, editor) : null;
-
-  async function handleSave(e) {
-    e.preventDefault();
-    if (dup) return;
-    setSaving(true);
-    try {
-      const id = await saveArticle({
-        id: editor.id || undefined,
-        gameName: editor.gameName || undefined,
-        sourceBeebomUrl: editor.sourceBeebomUrl || undefined,
-        sourceTechwiserUrl: editor.sourceTechwiserUrl || undefined,
-        technerdinessArticleUrl: editor.technerdinessArticleUrl || undefined,
-        gamingwizeArticleUrl: editor.gamingwizeArticleUrl || undefined,
-      });
-      notify("success", editor.id ? "Article updated" : "Article created", { id });
-      setEditor(null);
-    } catch (err) {
-      notify("error", "Save failed", err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function runResolve(article) {
-    const key = `resolve:${article._id}`;
-    setBusy((p) => ({ ...p, [key]: true }));
-    try {
-      const result = await resolveAction({ articleId: article._id });
-      notify("success", `Resolve: ${article.gameName}`, result);
-    } catch (e) {
-      notify("error", `Resolve: ${article.gameName}`, e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy((p) => ({ ...p, [key]: false }));
-    }
-  }
-
-  return (
-    <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Articles</h2>
-          <p className="text-muted-foreground">{articles.length} code article mappings</p>
-        </div>
-        <Button size="sm" onClick={() => setEditor(EMPTY_EDITOR)}>
-          <Plus className="h-3.5 w-3.5" /> Add Article
-        </Button>
-      </div>
-
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <TabsList>
-          {[
-            { v: "game_asc", l: "A-Z" },
-            { v: "game_desc", l: "Z-A" },
-            { v: "updated", l: "Recent" },
-          ].map((s) => (
-            <TabsTrigger
-              key={s.v}
-              value={s.v}
-              activeValue={sortMode}
-              onClick={setSortMode}
-            >
-              {s.l}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </div>
-
-      <div className="flex gap-6">
-        {/* Table */}
-        <div className="flex-1 min-w-0">
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="p-3 font-medium">Game</th>
-                    <th className="p-3 font-medium">Beebom</th>
-                    <th className="p-3 font-medium">TN</th>
-                    <th className="p-3 font-medium">GW</th>
-                    <th className="p-3 font-medium">Updated</th>
-                    <th className="p-3 font-medium w-24"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((a) => {
-                    const tn = a.siteStates.technerdiness;
-                    const gw = a.siteStates.gamingwize;
-                    return (
-                      <tr
-                        key={a._id}
-                        className={cn(
-                          "border-b transition-colors hover:bg-muted/30",
-                          editor?.id === a._id && "bg-muted/40",
-                        )}
-                      >
-                        <td className="p-3">
-                          <div className="font-medium">{a.gameName}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{a._id}</div>
-                        </td>
-                        <td className="p-3">
-                          {a.sourceBeebomUrl ? (
-                            <a
-                              href={a.sourceBeebomUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-info hover:underline text-xs"
-                            >
-                              {truncate(a.sourceBeebomUrl, 30)}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground/40">-</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <div className="space-y-0.5">
-                            {a.technerdinessArticleUrl ? (
-                              <a
-                                href={a.technerdinessArticleUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-info hover:underline text-xs block"
-                              >
-                                {truncate(a.technerdinessArticleUrl, 30)}
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground/40 text-xs">-</span>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                              #{tn.wordpressPostId || "-"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          <div className="space-y-0.5">
-                            {a.gamingwizeArticleUrl ? (
-                              <a
-                                href={a.gamingwizeArticleUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-info hover:underline text-xs block"
-                              >
-                                {truncate(a.gamingwizeArticleUrl, 30)}
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground/40 text-xs">-</span>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                              #{gw.wordpressPostId || "-"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDateTime(a.updatedAt)}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setEditor(mapArticleToEditor(a))}
-                              title="Edit"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => runResolve(a)}
-                              disabled={busy[`resolve:${a._id}`]}
-                              title="Resolve WP IDs"
-                            >
-                              <Link2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-
-        {/* Editor */}
-        {editor && (
-          <Card className="w-80 shrink-0 self-start sticky top-6">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">
-                  {editor.id ? "Edit Article" : "New Article"}
-                </CardTitle>
-                <Button variant="ghost" size="icon-sm" onClick={() => setEditor(null)}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {dup && (
-                <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-                  <p>
-                    This {dup.label} already exists on{" "}
-                    <strong>{dup.article.gameName}</strong>.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    className="mt-2"
-                    onClick={() => setEditor(mapArticleToEditor(dup.article))}
-                  >
-                    Edit Existing
-                  </Button>
-                </div>
-              )}
-              <form onSubmit={handleSave} className="space-y-3">
-                <label className="block space-y-1">
-                  <span className="text-xs text-muted-foreground">Game Name</span>
-                  <Input
-                    value={editor.gameName}
-                    onChange={(e) => updateField("gameName", e.target.value)}
-                    placeholder="Anime Vanguards"
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs text-muted-foreground">Beebom URL</span>
-                  <Input
-                    value={editor.sourceBeebomUrl}
-                    onChange={(e) => updateField("sourceBeebomUrl", e.target.value)}
-                    placeholder="https://beebom.com/..."
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs text-muted-foreground">TechWiser URL</span>
-                  <Input
-                    value={editor.sourceTechwiserUrl}
-                    onChange={(e) => updateField("sourceTechwiserUrl", e.target.value)}
-                    placeholder="https://www.techwiser.com/..."
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs text-muted-foreground">Tech Nerdiness URL</span>
-                  <Input
-                    value={editor.technerdinessArticleUrl}
-                    onChange={(e) => updateField("technerdinessArticleUrl", e.target.value)}
-                    placeholder="https://www.technerdiness.com/..."
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs text-muted-foreground">Gaming Wize URL</span>
-                  <Input
-                    value={editor.gamingwizeArticleUrl}
-                    onChange={(e) => updateField("gamingwizeArticleUrl", e.target.value)}
-                    placeholder="https://www.gamingwize.com/..."
-                  />
-                </label>
-                <Button type="submit" size="sm" className="w-full" disabled={saving || !!dup}>
-                  {saving ? "Saving..." : editor.id ? "Save Changes" : "Create Article"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </>
-  );
-}
