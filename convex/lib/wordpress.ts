@@ -15,7 +15,10 @@ const DEFAULT_EXPIRED_MARKER_START = "<!-- TN_EXPIRED_CODES_START -->";
 const DEFAULT_EXPIRED_MARKER_END = "<!-- TN_EXPIRED_CODES_END -->";
 const DEFAULT_UPDATE_MARKER_START = "<!-- TN_CODES_UPDATE_START -->";
 const DEFAULT_UPDATE_MARKER_END = "<!-- TN_CODES_UPDATE_END -->";
-const DEFAULT_LETROSO_ARTICLE_URL = "https://www.technerdiness.com/puzzle/letroso-answers-today/";
+const DEFAULT_LETROSO_ARTICLE_URLS: Record<WordPressSiteKey, string> = {
+  technerdiness: "https://www.technerdiness.com/puzzle/letroso-answers-today/",
+  gamingwize: "https://www.gamingwize.com/puzzles/letroso-answers-today/",
+};
 const DEFAULT_LETROSO_MARKER_START = "<!-- TN_LETROSO_ANSWER_START -->";
 const DEFAULT_LETROSO_MARKER_END = "<!-- TN_LETROSO_ANSWER_END -->";
 const DEFAULT_LETROSO_HISTORY_MARKER_START = "<!-- TN_LETROSO_HISTORY_START -->";
@@ -101,32 +104,34 @@ function getUpdateTimezone(siteKey?: WordPressSiteKey): string {
   return getEnvValue("WORDPRESS_UPDATE_TIMEZONE", siteKey) || process.env.TZ || "UTC";
 }
 
-function getLetrosoArticleUrl(): string {
-  return process.env["WORDPRESS_LETROSO_ARTICLE_URL"]?.trim() || DEFAULT_LETROSO_ARTICLE_URL;
+function getLetrosoArticleUrl(siteKey?: WordPressSiteKey): string {
+  const envUrl = getEnvValue("WORDPRESS_LETROSO_ARTICLE_URL", siteKey);
+  if (envUrl) return envUrl;
+  return siteKey ? DEFAULT_LETROSO_ARTICLE_URLS[siteKey] : DEFAULT_LETROSO_ARTICLE_URLS.technerdiness;
 }
 
-function getLetrosoMarkerStart(): string {
-  return process.env["WORDPRESS_LETROSO_MARKER_START"]?.trim() || DEFAULT_LETROSO_MARKER_START;
+function getLetrosoMarkerStart(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_MARKER_START", siteKey) || DEFAULT_LETROSO_MARKER_START;
 }
 
-function getLetrosoMarkerEnd(): string {
-  return process.env["WORDPRESS_LETROSO_MARKER_END"]?.trim() || DEFAULT_LETROSO_MARKER_END;
+function getLetrosoMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_MARKER_END", siteKey) || DEFAULT_LETROSO_MARKER_END;
 }
 
-function getLetrosoHistoryMarkerStart(): string {
-  return process.env["WORDPRESS_LETROSO_HISTORY_MARKER_START"]?.trim() || DEFAULT_LETROSO_HISTORY_MARKER_START;
+function getLetrosoHistoryMarkerStart(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_HISTORY_MARKER_START", siteKey) || DEFAULT_LETROSO_HISTORY_MARKER_START;
 }
 
-function getLetrosoHistoryMarkerEnd(): string {
-  return process.env["WORDPRESS_LETROSO_HISTORY_MARKER_END"]?.trim() || DEFAULT_LETROSO_HISTORY_MARKER_END;
+function getLetrosoHistoryMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_HISTORY_MARKER_END", siteKey) || DEFAULT_LETROSO_HISTORY_MARKER_END;
 }
 
-function getLetrosoCurrentDateMarkerStart(): string {
-  return process.env["WORDPRESS_LETROSO_CURRENT_DATE_MARKER_START"]?.trim() || DEFAULT_LETROSO_CURRENT_DATE_MARKER_START;
+function getLetrosoCurrentDateMarkerStart(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_CURRENT_DATE_MARKER_START", siteKey) || DEFAULT_LETROSO_CURRENT_DATE_MARKER_START;
 }
 
-function getLetrosoCurrentDateMarkerEnd(): string {
-  return process.env["WORDPRESS_LETROSO_CURRENT_DATE_MARKER_END"]?.trim() || DEFAULT_LETROSO_CURRENT_DATE_MARKER_END;
+function getLetrosoCurrentDateMarkerEnd(siteKey?: WordPressSiteKey): string {
+  return getEnvValue("WORDPRESS_LETROSO_CURRENT_DATE_MARKER_END", siteKey) || DEFAULT_LETROSO_CURRENT_DATE_MARKER_END;
 }
 
 function mapPostTypeToEndpoint(postType?: string | null): WordPressEndpointType[] {
@@ -324,8 +329,8 @@ function extractMarkedSectionContent(content: string, markerStart: string, marke
   return content.slice(startIndex + markerStart.length, endIndex);
 }
 
-function extractCurrentLetrosoAnswerFromContent(content: string): string | null {
-  const answerSection = extractMarkedSectionContent(content, getLetrosoMarkerStart(), getLetrosoMarkerEnd());
+function extractCurrentLetrosoAnswerFromContent(content: string, siteKey?: WordPressSiteKey): string | null {
+  const answerSection = extractMarkedSectionContent(content, getLetrosoMarkerStart(siteKey), getLetrosoMarkerEnd(siteKey));
   if (!answerSection) {
     return null;
   }
@@ -510,24 +515,29 @@ export async function updateWordPressArticleCodesSection(input: {
 export async function updateWordPressLetrosoAnswerSection(input: {
   result: LetrosoAnswerResult;
   history: LetrosoAnswerHistoryEntry[];
+  siteKey?: WordPressSiteKey;
 }): Promise<{
+  siteKey: WordPressSiteKey;
   articleUrl: string;
   wordpressPostId: number;
   wordpressPostType: WordPressPostType;
   updated: boolean;
   reason: "marker_replaced" | "no_change" | "answer_unchanged";
 }> {
-  const articleUrl = getLetrosoArticleUrl();
-  const resolvedPost = await lookupWordPressPostByUrl(articleUrl);
+  const siteKey = input.siteKey ?? "technerdiness";
+  const articleUrl = getLetrosoArticleUrl(siteKey);
+  const resolvedPost = await lookupWordPressPostByUrl(articleUrl, siteKey);
   const siteOrigin = new URL(articleUrl).origin;
   const { endpoint, contentRaw, titleRaw } = await fetchWordPressPostContent(
     articleUrl,
     resolvedPost.wordpressPostId,
-    resolvedPost.wordpressPostType
+    resolvedPost.wordpressPostType,
+    siteKey
   );
-  const currentAnswer = extractCurrentLetrosoAnswerFromContent(contentRaw);
+  const currentAnswer = extractCurrentLetrosoAnswerFromContent(contentRaw, siteKey);
   if (currentAnswer === normalizeComparisonValue(input.result.answer)) {
     return {
+      siteKey,
       articleUrl,
       wordpressPostId: resolvedPost.wordpressPostId,
       wordpressPostType: resolvedPost.wordpressPostType,
@@ -540,24 +550,25 @@ export async function updateWordPressLetrosoAnswerSection(input: {
   const withAnswer = replaceMarkedSection(
     contentRaw,
     renderWordPressLetrosoAnswerHtml(input.result),
-    getLetrosoMarkerStart(),
-    getLetrosoMarkerEnd()
+    getLetrosoMarkerStart(siteKey),
+    getLetrosoMarkerEnd(siteKey)
   );
   const withHistory = replaceMarkedSection(
     withAnswer,
     renderWordPressLetrosoHistoryHtml(input.history),
-    getLetrosoHistoryMarkerStart(),
-    getLetrosoHistoryMarkerEnd()
+    getLetrosoHistoryMarkerStart(siteKey),
+    getLetrosoHistoryMarkerEnd(siteKey)
   );
   const updatedContent = replaceInlineMarkedText(
     withHistory,
     escapeHtml(formatIsoDateLong(input.result.answerDate)),
-    getLetrosoCurrentDateMarkerStart(),
-    getLetrosoCurrentDateMarkerEnd()
+    getLetrosoCurrentDateMarkerStart(siteKey),
+    getLetrosoCurrentDateMarkerEnd(siteKey)
   );
 
   if (updatedContent === contentRaw && titleRaw === updatedTitle) {
     return {
+      siteKey,
       articleUrl,
       wordpressPostId: resolvedPost.wordpressPostId,
       wordpressPostType: resolvedPost.wordpressPostType,
@@ -576,9 +587,10 @@ export async function updateWordPressLetrosoAnswerSection(input: {
       content: updatedContent,
       title: updatedTitle,
     }),
-  });
+  }, true, siteKey);
 
   return {
+    siteKey,
     articleUrl,
     wordpressPostId: resolvedPost.wordpressPostId,
     wordpressPostType: resolvedPost.wordpressPostType,

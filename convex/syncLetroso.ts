@@ -8,6 +8,15 @@ import {
   revealLetrosoAnswer,
 } from "./lib/providers/beebomLetroso";
 import { updateWordPressLetrosoAnswerSection } from "./lib/wordpress";
+import type { WordPressSiteKey } from "./lib/wordpress";
+
+interface WordPressSiteResult {
+  siteKey: WordPressSiteKey;
+  status: "updated" | "skipped" | "error";
+  articleUrl?: string;
+  wordpressPostId?: number;
+  reason?: string;
+}
 
 interface SyncLetrosoSummary {
   sourceUrl: string;
@@ -24,16 +33,7 @@ interface SyncLetrosoSummary {
         status: "skipped";
         reason: string;
       };
-  wordpress:
-    | {
-        status: "updated";
-        articleUrl: string;
-        wordpressPostId: number;
-      }
-    | {
-        status: "skipped";
-        reason: string;
-      };
+  wordpress: WordPressSiteResult[];
 }
 
 function validateUrl(value: string): string {
@@ -58,6 +58,8 @@ async function handleSyncLetroso(
   console.log(`Letroso sync start: mode=${dryRun ? "dry-run" : "write"}`);
   console.log(`Source: ${sourceUrl}`);
 
+  const LETROSO_SITES: WordPressSiteKey[] = ["technerdiness", "gamingwize"];
+
   const result = await revealLetrosoAnswer(sourceUrl);
   const summary: SyncLetrosoSummary = {
     sourceUrl: result.sourceUrl,
@@ -75,15 +77,12 @@ async function handleSyncLetroso(
           status: "saved",
         },
     wordpress: dryRun
-      ? {
-          status: "skipped",
+      ? LETROSO_SITES.map((siteKey) => ({
+          siteKey,
+          status: "skipped" as const,
           reason: "--dry-run",
-        }
-      : {
-          status: "updated",
-          articleUrl: "",
-          wordpressPostId: 0,
-        },
+        }))
+      : [],
   };
 
   if (dryRun) {
@@ -119,31 +118,48 @@ async function handleSyncLetroso(
     (entry: { answerDate: string; answer: string }) =>
       entry.answerDate !== result.answerDate
   );
-  const wordpressResult = await updateWordPressLetrosoAnswerSection({
-    result,
-    history,
-  });
 
-  if (wordpressResult.updated) {
-    summary.wordpress = {
-      status: "updated",
-      articleUrl: wordpressResult.articleUrl,
-      wordpressPostId: wordpressResult.wordpressPostId,
-    };
-    console.log(
-      `WordPress updated: post ${wordpressResult.wordpressPostId} (${history.length} history rows)`
-    );
-  } else {
-    const reason = wordpressResult.reason === "answer_unchanged" ? "answer unchanged" : "no change";
-    summary.wordpress = {
-      status: "skipped",
-      reason,
-    };
-    console.log(`WordPress skipped: ${reason}`);
+  for (const siteKey of LETROSO_SITES) {
+    try {
+      const wordpressResult = await updateWordPressLetrosoAnswerSection({
+        result,
+        history,
+        siteKey,
+      });
+
+      if (wordpressResult.updated) {
+        summary.wordpress.push({
+          siteKey,
+          status: "updated",
+          articleUrl: wordpressResult.articleUrl,
+          wordpressPostId: wordpressResult.wordpressPostId,
+        });
+        console.log(
+          `WordPress [${siteKey}] updated: post ${wordpressResult.wordpressPostId} (${history.length} history rows)`
+        );
+      } else {
+        const reason = wordpressResult.reason === "answer_unchanged" ? "answer unchanged" : "no change";
+        summary.wordpress.push({
+          siteKey,
+          status: "skipped",
+          reason,
+        });
+        console.log(`WordPress [${siteKey}] skipped: ${reason}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      summary.wordpress.push({
+        siteKey,
+        status: "error",
+        reason: errorMessage,
+      });
+      console.error(`WordPress [${siteKey}] error: ${errorMessage}`);
+    }
   }
 
+  const siteStatuses = summary.wordpress.map((s) => `${s.siteKey}=${s.status}`).join(", ");
   console.log(
-    `Letroso sync complete: answer=${summary.answer}, date=${summary.answerDate}, convex=${summary.convex.status}, wordpress=${summary.wordpress.status}`
+    `Letroso sync complete: answer=${summary.answer}, date=${summary.answerDate}, convex=${summary.convex.status}, wordpress=[${siteStatuses}]`
   );
 
   return summary;
