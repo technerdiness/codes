@@ -267,12 +267,16 @@ function normalizeWordPressCodesHtml(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
-function replaceMarkedSection(content: string, replacementHtml: string, markerStart: string, markerEnd: string): string {
+function replaceMarkedSection(content: string, replacementHtml: string, markerStart: string, markerEnd: string, required = false): string {
   const startIndex = content.indexOf(markerStart);
   const endIndex = content.indexOf(markerEnd);
 
   if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-    throw new Error(`Could not find WordPress marker block. Add ${markerStart} and ${markerEnd} to the article content.`);
+    if (required) {
+      throw new Error(`Could not find WordPress marker block. Add ${markerStart} and ${markerEnd} to the article content.`);
+    }
+    console.log(`Marker not found, skipping: ${markerStart}`);
+    return content;
   }
 
   const before = content.slice(0, startIndex + markerStart.length);
@@ -280,12 +284,16 @@ function replaceMarkedSection(content: string, replacementHtml: string, markerSt
   return `${before}\n${replacementHtml}\n${after}`;
 }
 
-function replaceInlineMarkedText(content: string, replacementText: string, markerStart: string, markerEnd: string): string {
+function replaceInlineMarkedText(content: string, replacementText: string, markerStart: string, markerEnd: string, required = false): string {
   const startIndex = content.indexOf(markerStart);
   const endIndex = content.indexOf(markerEnd);
 
   if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-    throw new Error(`Could not find WordPress inline marker block. Add ${markerStart} and ${markerEnd} to the article content.`);
+    if (required) {
+      throw new Error(`Could not find WordPress inline marker block. Add ${markerStart} and ${markerEnd} to the article content.`);
+    }
+    console.log(`Inline marker not found, skipping: ${markerStart}`);
+    return content;
   }
 
   const before = content.slice(0, startIndex + markerStart.length);
@@ -302,19 +310,22 @@ function replaceMarkedSections(
     content,
     input.activeHtml,
     getActiveMarkerStart(siteKey),
-    getActiveMarkerEnd(siteKey)
+    getActiveMarkerEnd(siteKey),
+    true
   );
   const withExpired = replaceMarkedSection(
     withActive,
     input.expiredHtml,
     getExpiredMarkerStart(siteKey),
-    getExpiredMarkerEnd(siteKey)
+    getExpiredMarkerEnd(siteKey),
+    true
   );
   return replaceMarkedSection(
     withExpired,
     input.updateHtml,
     getUpdateMarkerStart(siteKey),
-    getUpdateMarkerEnd(siteKey)
+    getUpdateMarkerEnd(siteKey),
+    true
   );
 }
 
