@@ -35,4 +35,36 @@ crons.cron(
   {},
 );
 
+// Collect gaming news at 6:00 AM IST (00:30 UTC)
+crons.cron(
+  "collect-gaming-news-morning",
+  "30 0 * * *",
+  internal.collectGamingNews.run,
+  {},
+);
+
+// Collect gaming news at 6:00 PM IST (12:30 UTC)
+crons.cron(
+  "collect-gaming-news-evening",
+  "30 12 * * *",
+  internal.collectGamingNews.run,
+  {},
+);
+
+// Write gaming news articles at 6:30 AM IST (01:00 UTC)
+crons.cron(
+  "write-gaming-news-morning",
+  "0 1 * * *",
+  internal.writeGamingNewsArticle.run,
+  {},
+);
+
+// Write gaming news articles at 6:30 PM IST (13:00 UTC)
+crons.cron(
+  "write-gaming-news-evening",
+  "0 13 * * *",
+  internal.writeGamingNewsArticle.run,
+  {},
+);
+
 export default crons;

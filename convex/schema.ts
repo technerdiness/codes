@@ -118,6 +118,35 @@ export default defineSchema({
     .index("by_puzzle_id", ["puzzleId"])
     .index("by_fetched_at", ["fetchedAt"]),
 
+  gamingNews: defineTable({
+    title: v.string(),
+    slug: v.string(),
+    summary: v.string(),
+    sourceUrls: v.array(v.string()),
+    sourceSnippets: v.array(
+      v.object({
+        source: v.string(),
+        title: v.string(),
+        snippet: v.string(),
+        fullContent: v.optional(v.string()),
+        url: v.string(),
+        publishedAt: v.optional(v.string()),
+      })
+    ),
+    status: v.string(), // "pending" | "writing" | "completed" | "failed"
+    collectedAt: v.string(),
+    articleTitle: v.optional(v.string()),
+    articleHtml: v.optional(v.string()),
+    metaDescription: v.optional(v.string()),
+    wordpressPostId: v.optional(v.number()),
+    wordpressUrl: v.optional(v.string()),
+    writtenAt: v.optional(v.string()),
+    error: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_slug", ["slug"])
+    .index("by_collected_at", ["collectedAt"]),
+
   strandsAnswers: defineTable({
     answerDate: v.string(),
     answerDateSource: v.string(),

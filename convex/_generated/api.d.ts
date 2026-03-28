@@ -12,7 +12,9 @@ import type * as articles from "../articles.js";
 import type * as articlesInternal from "../articlesInternal.js";
 import type * as auth from "../auth.js";
 import type * as codes from "../codes.js";
+import type * as collectGamingNews from "../collectGamingNews.js";
 import type * as crons from "../crons.js";
+import type * as gamingNews from "../gamingNews.js";
 import type * as http from "../http.js";
 import type * as letrosoAnswers from "../letrosoAnswers.js";
 import type * as lib_providers_beebom from "../lib/providers/beebom.js";
@@ -26,6 +28,7 @@ import type * as syncCodes from "../syncCodes.js";
 import type * as syncLetroso from "../syncLetroso.js";
 import type * as syncNytPuzzles from "../syncNytPuzzles.js";
 import type * as wordpressState from "../wordpressState.js";
+import type * as writeGamingNewsArticle from "../writeGamingNewsArticle.js";
 
 import type {
   ApiFromModules,
@@ -38,7 +41,9 @@ declare const fullApi: ApiFromModules<{
   articlesInternal: typeof articlesInternal;
   auth: typeof auth;
   codes: typeof codes;
+  collectGamingNews: typeof collectGamingNews;
   crons: typeof crons;
+  gamingNews: typeof gamingNews;
   http: typeof http;
   letrosoAnswers: typeof letrosoAnswers;
   "lib/providers/beebom": typeof lib_providers_beebom;
@@ -52,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   syncLetroso: typeof syncLetroso;
   syncNytPuzzles: typeof syncNytPuzzles;
   wordpressState: typeof wordpressState;
+  writeGamingNewsArticle: typeof writeGamingNewsArticle;
 }>;
 
 /**
