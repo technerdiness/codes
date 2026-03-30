@@ -102,6 +102,7 @@ Return ONLY this JSON object (no markdown):
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 500,
+      response_format: { type: "json_object" },
     }),
   });
 
@@ -114,10 +115,8 @@ Return ONLY this JSON object (no markdown):
     choices: { message: { content: string } }[];
   };
   const text = data.choices[0]?.message?.content ?? "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Groq returned no valid JSON");
 
-  const parsed = JSON.parse(jsonMatch[0]) as {
+  const parsed = JSON.parse(text) as {
     title: string;
     slug: string;
     summary: string;

@@ -396,8 +396,7 @@ function Dashboard() {
           ))}
         </nav>
         <div className="mt-auto p-3 space-y-2">
-          <Badge variant="success">Connected</Badge>
-          <Button
+<Button
             variant="ghost"
             size="sm"
             className="w-full justify-start text-muted-foreground"

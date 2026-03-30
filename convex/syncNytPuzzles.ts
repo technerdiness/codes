@@ -139,7 +139,7 @@ interface NytStrandsApiResponse {
 const DEFAULT_WORDLE_ARTICLE_URL =
   "https://www.technerdiness.com/puzzle/todays-wordle-hints-answers/";
 const DEFAULT_GW_WORDLE_ARTICLE_URL =
-  "https://www.gamingwize.com/puzzles/todays-wordle-hints-answers/";
+  "https://www.gamingwize.com/puzzles/today-wordle-hints-answers/";
 const DEFAULT_WORDLE_MARKER_START = "<!-- TN_WORDLE_ANSWER_START -->";
 const DEFAULT_WORDLE_MARKER_END = "<!-- TN_WORDLE_ANSWER_END -->";
 const DEFAULT_WORDLE_HISTORY_MARKER_START = "<!-- TN_WORDLE_HISTORY_START -->";
@@ -155,7 +155,7 @@ const DEFAULT_CONNECTIONS_CURRENT_DATE_MARKER_END = "<!-- TN_CONNECTIONS_CURRENT
 const DEFAULT_STRANDS_ARTICLE_URL =
   "https://www.technerdiness.com/puzzle/todays-nyt-strands-hints-answers/";
 const DEFAULT_GW_STRANDS_ARTICLE_URL =
-  "https://www.gamingwize.com/puzzles/todays-nyt-strands-hints-answers/";
+  "https://www.gamingwize.com/puzzles/today-nyt-strands-hints-answers/";
 const DEFAULT_STRANDS_SPANGRAM_MARKER_START = "<!-- TN_STRANDS_SPANGRAM_START -->";
 const DEFAULT_STRANDS_SPANGRAM_MARKER_END = "<!-- TN_STRANDS_SPANGRAM_END -->";
 const DEFAULT_STRANDS_THEME_WORDS_MARKER_START = "<!-- TN_STRANDS_THEME_WORDS_START -->";

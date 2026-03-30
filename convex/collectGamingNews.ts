@@ -13,6 +13,7 @@ interface RssFeedItem {
   description: string;
   pubDate: string;
   source: string;
+  categories: string[]; // parsed <category> tags from the feed item
 }
 
 interface NewsApiArticle {
@@ -70,14 +71,26 @@ const BUCKET_2_KEYWORDS = [
   "Xbox", "Game Pass", "Xbox Game Pass", "Microsoft Gaming", "Phil Spencer",
 ];
 
+function matchesKeywords(haystack: string, keywords: string[]): boolean {
+  const lower = haystack.toLowerCase();
+  return keywords.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
 function getItemBucket(item: RssFeedItem): 1 | 2 | 3 {
-  const titleLower = item.title.toLowerCase();
-  for (const kw of BUCKET_1_KEYWORDS) {
-    if (titleLower.includes(kw.toLowerCase())) return 1;
+  // Check categories first (high confidence — explicit taxonomy from the publisher)
+  // Any single category match is enough
+  for (const cat of item.categories) {
+    if (matchesKeywords(cat, BUCKET_1_KEYWORDS)) return 1;
   }
-  for (const kw of BUCKET_2_KEYWORDS) {
-    if (titleLower.includes(kw.toLowerCase())) return 2;
+  for (const cat of item.categories) {
+    if (matchesKeywords(cat, BUCKET_2_KEYWORDS)) return 2;
   }
+
+  // Fall back to title keyword matching (covers IGN, PC Gamer, GamesRadar, GameSpot
+  // which expose no category data in their feeds)
+  if (matchesKeywords(item.title, BUCKET_1_KEYWORDS)) return 1;
+  if (matchesKeywords(item.title, BUCKET_2_KEYWORDS)) return 2;
+
   return 3;
 }
 
@@ -175,6 +188,17 @@ function extractAllItems(xml: string): string[] {
   return items;
 }
 
+function extractAllCategories(itemXml: string): string[] {
+  const categories: string[] = [];
+  const regex = /<category[^>]*>(?:\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*|([\s\S]*?))<\/category>/gi;
+  let match;
+  while ((match = regex.exec(itemXml)) !== null) {
+    const val = (match[1] ?? match[2] ?? "").trim();
+    if (val) categories.push(val);
+  }
+  return categories;
+}
+
 function parseRssFeed(xml: string, sourceName: string): RssFeedItem[] {
   const items = extractAllItems(xml);
   const results: RssFeedItem[] = [];
@@ -196,9 +220,10 @@ function parseRssFeed(xml: string, sourceName: string): RssFeedItem[] {
       .slice(0, 500);
     const pubDate =
       extractXmlTag(item, "pubDate") || extractXmlTag(item, "published") || extractXmlTag(item, "updated");
+    const categories = extractAllCategories(item);
 
     if (title && link) {
-      results.push({ title, link, description, pubDate, source: sourceName });
+      results.push({ title, link, description, pubDate, source: sourceName, categories });
     }
   }
 
@@ -453,6 +478,7 @@ async function fetchNewsApi(): Promise<RssFeedItem[]> {
       description: stripHtml(article.description ?? ""),
       pubDate: article.publishedAt ?? "",
       source: `NewsAPI:${article.source?.name ?? "Unknown"}`,
+      categories: [], // NewsAPI doesn't provide categories; fall back to title matching
     }));
   } catch (error) {
     console.log(
