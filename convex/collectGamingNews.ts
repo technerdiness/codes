@@ -882,6 +882,14 @@ async function handleCollectGamingNews(
 
   console.log(`DB: ${dbResult.inserted} inserted, ${dbResult.skipped} skipped (duplicate slugs)`);
 
+  await ctx.runMutation(internal.syncRuns.record, {
+    automationType: "collect_gaming_news",
+    ranAt: new Date().toISOString(),
+    updatedCount: dbResult.inserted,
+    issueCount: 0,
+    issues: [],
+  });
+
   return {
     rssItemsCollected: rssItems.length,
     newsApiItemsCollected: newsApiItems.length,

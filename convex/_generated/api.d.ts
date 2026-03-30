@@ -28,6 +28,7 @@ import type * as resolveWordpressPostId from "../resolveWordpressPostId.js";
 import type * as syncCodes from "../syncCodes.js";
 import type * as syncLetroso from "../syncLetroso.js";
 import type * as syncNytPuzzles from "../syncNytPuzzles.js";
+import type * as syncRuns from "../syncRuns.js";
 import type * as wordpressState from "../wordpressState.js";
 import type * as writeGamingNewsArticle from "../writeGamingNewsArticle.js";
 
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   syncCodes: typeof syncCodes;
   syncLetroso: typeof syncLetroso;
   syncNytPuzzles: typeof syncNytPuzzles;
+  syncRuns: typeof syncRuns;
   wordpressState: typeof wordpressState;
   writeGamingNewsArticle: typeof writeGamingNewsArticle;
 }>;

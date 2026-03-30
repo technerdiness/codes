@@ -336,6 +336,24 @@ async function handleWriteGamingNewsArticle(
   const failed = results.filter((r) => !r.success).length;
   console.log(`\nDone: ${processed} written, ${failed} failed out of ${pendingArticles.length} total`);
 
+  if (!dryRun) {
+    const issues = results
+      .filter((r) => !r.success && r.error)
+      .map((r) => ({
+        group: "Article writing",
+        identifier: r.title,
+        reason: r.error!,
+      }));
+
+    await ctx.runMutation(internal.syncRuns.record, {
+      automationType: "write_gaming_news",
+      ranAt: new Date().toISOString(),
+      updatedCount: processed,
+      issueCount: issues.length,
+      issues,
+    });
+  }
+
   return {
     totalPending: pendingArticles.length,
     processed,

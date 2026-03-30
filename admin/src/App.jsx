@@ -32,7 +32,6 @@ import {
   LetterText,
   Gamepad2,
   LayoutDashboard,
-  Globe,
   ChevronDown,
   ChevronUp,
   Check,
@@ -434,133 +433,131 @@ function Dashboard() {
 
 // ── Overview Page ──────────────────────────────────────────────────────────
 
-function OverviewPage({ notify }) {
-  const articles = useQuery(api.articles.listArticles) ?? [];
+const AUTOMATION_META = {
+  game_codes:          { label: "Game Codes",          icon: Gamepad2 },
+  nyt_puzzles:         { label: "NYT Puzzles",          icon: Puzzle },
+  letroso:             { label: "Letroso",              icon: LetterText },
+  collect_gaming_news: { label: "Collect Gaming News",  icon: Newspaper },
+  write_gaming_news:   { label: "Write Gaming News",    icon: Zap },
+};
 
-  const totalArticles = articles.length;
-  const withBeebom = articles.filter((a) => a.sourceBeebomUrl).length;
-  const tnLinked = articles.filter(
-    (a) => a.siteStates.technerdiness.wordpressPostId,
-  ).length;
-  const gwLinked = articles.filter(
-    (a) => a.siteStates.gamingwize.wordpressPostId,
-  ).length;
+function timeAgo(isoString) {
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function OverviewPage() {
+  const runs = useQuery(api.syncRuns.listLatest);
+
+  const allIssues = runs
+    ? Object.values(runs).flatMap((r) => (r ? r.issues : []))
+    : [];
+  const totalIssues = allIssues.length;
 
   return (
     <>
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">Overview of your automation system.</p>
+        <h2 className="text-2xl font-bold tracking-tight">Automation Health</h2>
+        <p className="text-muted-foreground">Last run results across all automations.</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Articles" value={totalArticles} />
-        <StatCard label="Beebom Sources" value={withBeebom} />
-        <StatCard label="TN Linked" value={tnLinked} />
-        <StatCard label="GW Linked" value={gwLinked} />
-      </div>
-
-      {/* Quick Actions */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Quick Actions</h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <QuickActionCard
-            title="Sync All Codes"
-            description="Scrape Beebom and update WordPress for all articles."
-            icon={Gamepad2}
-            notify={notify}
-            actionHook={() => useAction(api.syncCodes.syncCodes)}
-            runArgs={{}}
-            dryArgs={{ dryRun: true }}
-          />
-          <QuickActionCard
-            title="Sync Letroso"
-            description="Fetch today's Letroso answer and update WordPress."
-            icon={LetterText}
-            notify={notify}
-            actionHook={() => useAction(api.syncLetroso.syncLetroso)}
-            runArgs={{}}
-            dryArgs={{ dryRun: true }}
-          />
-          <QuickActionCard
-            title="Sync All NYT Puzzles"
-            description="Fetch Wordle, Connections, and Strands answers."
-            icon={Puzzle}
-            notify={notify}
-            actionHook={() => useAction(api.syncNytPuzzles.syncNytPuzzles)}
-            runArgs={{}}
-            dryArgs={{ dryRun: true }}
-          />
+      {/* Overall status banner */}
+      {runs !== undefined && (
+        <div className={cn(
+          "flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium",
+          totalIssues === 0
+            ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+            : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+        )}>
+          {totalIssues === 0
+            ? <Check className="h-4 w-4" />
+            : <AlertCircle className="h-4 w-4" />}
+          {totalIssues === 0
+            ? "All automations running cleanly."
+            : `${totalIssues} issue${totalIssues !== 1 ? "s" : ""} need attention.`}
         </div>
+      )}
+
+      {/* Per-automation cards */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {Object.entries(AUTOMATION_META).map(([key, meta]) => {
+          const run = runs?.[key];
+          return <AutomationCard key={key} meta={meta} run={run ?? null} loading={runs === undefined} />;
+        })}
       </div>
     </>
   );
 }
 
-function StatCard({ label, value }) {
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-3xl font-bold mt-1">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
+function AutomationCard({ meta, run, loading }) {
+  const Icon = meta.icon;
+  const hasIssues = run && run.issueCount > 0;
 
-function QuickActionCard({ title, description, icon: Icon, notify, actionHook, runArgs, dryArgs }) {
-  const action = actionHook();
-  const [busy, setBusy] = useState(null);
-
-  async function run(isDry) {
-    const args = isDry ? dryArgs : runArgs;
-    const label = isDry ? `Dry run: ${title}` : title;
-    setBusy(isDry ? "dry" : "run");
-    try {
-      const result = await action(args);
-      notify("success", label, result);
-    } catch (e) {
-      notify("error", label, e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
+  // Group issues by their "group" field
+  const groupedIssues = {};
+  if (run) {
+    for (const issue of run.issues) {
+      if (!groupedIssues[issue.group]) groupedIssues[issue.group] = [];
+      groupedIssues[issue.group].push(issue);
     }
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
-            <Icon className="h-4 w-4" />
+    <Card className={cn(hasIssues && "border-red-300 dark:border-red-700")}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg",
+              hasIssues ? "bg-red-100 dark:bg-red-900" : "bg-accent"
+            )}>
+              <Icon className={cn("h-4 w-4", hasIssues && "text-red-600 dark:text-red-400")} />
+            </div>
+            <CardTitle className="text-sm">{meta.label}</CardTitle>
           </div>
-          <CardTitle className="text-sm">{title}</CardTitle>
+          {run && (
+            <span className="text-xs text-muted-foreground">{timeAgo(run.ranAt)}</span>
+          )}
         </div>
-        <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => run(true)}
-            disabled={busy !== null}
-          >
-            <FlaskConical className="h-3.5 w-3.5" />
-            {busy === "dry" ? "Running..." : "Dry Run"}
-          </Button>
-          <Button
-            variant="success"
-            size="sm"
-            onClick={() => {
-              if (window.confirm(`Run ${title}? This will update WordPress.`)) run(false);
-            }}
-            disabled={busy !== null}
-          >
-            <Play className="h-3.5 w-3.5" />
-            {busy === "run" ? "Running..." : "Run"}
-          </Button>
-        </div>
+      <CardContent className="pt-0">
+        {loading && (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        )}
+        {!loading && !run && (
+          <p className="text-sm text-muted-foreground">No runs recorded yet.</p>
+        )}
+        {run && !hasIssues && (
+          <p className="text-sm text-muted-foreground">
+            {run.updatedCount} updated · no issues
+          </p>
+        )}
+        {run && hasIssues && (
+          <div className="mt-2 space-y-3">
+            <p className="text-sm font-medium text-red-700 dark:text-red-400">
+              {run.updatedCount} updated · {run.issueCount} issue{run.issueCount !== 1 ? "s" : ""}
+            </p>
+            {Object.entries(groupedIssues).map(([group, items]) => (
+              <div key={group}>
+                <p className="text-sm font-semibold mb-1">
+                  {group} has {items.length} issue{items.length !== 1 ? "s" : ""}
+                </p>
+                <div className="space-y-1.5">
+                  {items.map((issue, i) => (
+                    <div key={i} className="rounded-md bg-muted px-3 py-2 text-xs space-y-0.5">
+                      <p className="font-medium">{issue.identifier}</p>
+                      <p className="text-muted-foreground">{issue.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

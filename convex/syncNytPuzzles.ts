@@ -1475,6 +1475,37 @@ async function handleSync(
     }
   }
 
+  if (!dryRun) {
+    const issues: { group: string; identifier: string; reason: string }[] = [];
+    let updatedCount = 0;
+
+    for (const [puzzleName, puzzleSummary] of Object.entries(summary.puzzles)) {
+      const ps = puzzleSummary as Record<string, unknown>;
+      if (ps.status === "error" && typeof ps.error === "string") {
+        issues.push({ group: "NYT puzzle sync", identifier: puzzleName, reason: ps.error });
+      } else {
+        // Check per-site wordpress errors (stored as "error:..." strings)
+        for (const siteKey of ["wordpress", "wordpress_gw"]) {
+          const val = ps[siteKey];
+          if (typeof val === "string" && val.startsWith("error:")) {
+            const site = siteKey === "wordpress" ? "Tech Nerdiness" : "Gaming Wize";
+            issues.push({ group: `${site} update`, identifier: puzzleName, reason: val.slice(6) });
+          } else if (val === "updated") {
+            updatedCount++;
+          }
+        }
+      }
+    }
+
+    await ctx.runMutation(internal.syncRuns.record, {
+      automationType: "nyt_puzzles",
+      ranAt: new Date().toISOString(),
+      updatedCount,
+      issueCount: issues.length,
+      issues,
+    });
+  }
+
   return summary;
 }
 

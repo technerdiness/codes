@@ -147,6 +147,21 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_collected_at", ["collectedAt"]),
 
+  syncRuns: defineTable({
+    automationType: v.string(), // "game_codes" | "nyt_puzzles" | "letroso" | "collect_gaming_news" | "write_gaming_news"
+    ranAt: v.string(),
+    updatedCount: v.number(),
+    issueCount: v.number(),
+    issues: v.array(
+      v.object({
+        group: v.string(),   // e.g. "Beebom scraping", "Tech Nerdiness update", "Gaming Wize update"
+        identifier: v.string(), // game name, puzzle name, article title, etc.
+        reason: v.string(),
+      })
+    ),
+  })
+    .index("by_automation_type_and_ran_at", ["automationType", "ranAt"]),
+
   strandsAnswers: defineTable({
     answerDate: v.string(),
     answerDateSource: v.string(),

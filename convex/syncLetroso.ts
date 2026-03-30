@@ -162,6 +162,28 @@ async function handleSyncLetroso(
     `Letroso sync complete: answer=${summary.answer}, date=${summary.answerDate}, convex=${summary.convex.status}, wordpress=[${siteStatuses}]`
   );
 
+  if (!dryRun) {
+    const issues: { group: string; identifier: string; reason: string }[] = [];
+    let updatedCount = 0;
+
+    for (const wp of summary.wordpress) {
+      if (wp.status === "error" && wp.reason) {
+        const site = wp.siteKey === "technerdiness" ? "Tech Nerdiness update" : "Gaming Wize update";
+        issues.push({ group: site, identifier: `Letroso ${summary.answerDate}`, reason: wp.reason });
+      } else if (wp.status === "updated") {
+        updatedCount++;
+      }
+    }
+
+    await ctx.runMutation(internal.syncRuns.record, {
+      automationType: "letroso",
+      ranAt: new Date().toISOString(),
+      updatedCount,
+      issueCount: issues.length,
+      issues,
+    });
+  }
+
   return summary;
 }
 

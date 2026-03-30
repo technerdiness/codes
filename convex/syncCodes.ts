@@ -431,6 +431,33 @@ async function handleSyncCodes(
 
   logInfo(`Sync complete: ${successes.length} ok, ${failures.length} failed, ${wordpressUpdatedSites} WP update(s)`);
 
+  if (!dryRun) {
+    const issues: { group: string; identifier: string; reason: string }[] = [];
+
+    // Beebom scraping failures (whole article failed)
+    for (const f of failures) {
+      issues.push({ group: "Beebom scraping", identifier: f.gameName, reason: f.reason });
+    }
+
+    // WordPress update errors per site
+    for (const item of successes) {
+      for (const wp of item.wordpress) {
+        if (wp.reason === "error" && wp.error) {
+          const siteLabel = wp.siteKey === "technerdiness" ? "Tech Nerdiness update" : "Gaming Wize update";
+          issues.push({ group: siteLabel, identifier: item.gameName, reason: wp.error });
+        }
+      }
+    }
+
+    await ctx.runMutation(internal.syncRuns.record, {
+      automationType: "game_codes",
+      ranAt: new Date().toISOString(),
+      updatedCount: wordpressUpdatedSites,
+      issueCount: issues.length,
+      issues,
+    });
+  }
+
   return {
     dryRun,
     attemptedArticles: articles.length,
