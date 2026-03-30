@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as addManualNewsLink from "../addManualNewsLink.js";
 import type * as articles from "../articles.js";
 import type * as articlesInternal from "../articlesInternal.js";
 import type * as auth from "../auth.js";
@@ -37,6 +38,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  addManualNewsLink: typeof addManualNewsLink;
   articles: typeof articles;
   articlesInternal: typeof articlesInternal;
   auth: typeof auth;

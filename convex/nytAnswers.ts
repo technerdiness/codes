@@ -35,6 +35,21 @@ export const getPreviousWordleAnswer = internalQuery({
   },
 });
 
+export const getWordleHistory = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("wordleAnswers")
+      .withIndex("by_answer_date")
+      .order("desc")
+      .collect();
+    return rows.map((row) => ({
+      answerDate: row.answerDate,
+      answer: row.answer,
+      puzzleId: row.daysSinceLaunch,
+    }));
+  },
+});
+
 export const upsertConnectionsAnswer = internalMutation({
   args: {
     answerDate: v.string(),

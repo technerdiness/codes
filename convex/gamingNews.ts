@@ -1,5 +1,16 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+
+export const listRecentGamingNews = query({
+  args: {},
+  handler: async (ctx) => {
+    return ctx.db
+      .query("gamingNews")
+      .withIndex("by_collected_at")
+      .order("desc")
+      .take(30);
+  },
+});
 
 export const getNextPendingArticle = internalQuery({
   args: {},

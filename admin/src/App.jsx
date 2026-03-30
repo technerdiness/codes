@@ -38,6 +38,7 @@ import {
   Check,
   AlertCircle,
   SlidersHorizontal,
+  Newspaper,
 } from "lucide-react";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ const NAV = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "codes", label: "Game Codes", icon: Gamepad2 },
   { id: "puzzles", label: "Puzzles", icon: Puzzle },
+  { id: "gaming-news", label: "Gaming News", icon: Newspaper },
 ];
 
 const EMPTY_EDITOR = {
@@ -412,6 +414,7 @@ function Dashboard() {
           {view === "overview" && <OverviewPage notify={notify} />}
           {view === "codes" && <CodesPage notify={notify} />}
           {view === "puzzles" && <PuzzlesPage notify={notify} />}
+          {view === "gaming-news" && <GamingNewsPage notify={notify} />}
           {/* Articles tab removed — Game Codes handles everything */}
         </div>
       </main>
@@ -1120,6 +1123,127 @@ function UrlDetail({ label, url }) {
 }
 
 // ── Puzzles Page ───────────────────────────────────────────────────────────
+
+// ── Gaming News Page ───────────────────────────────────────────────────────
+
+function GamingNewsStatusBadge({ status }) {
+  const map = {
+    pending: ["outline", "Pending"],
+    writing: ["info", "Writing"],
+    completed: ["success", "Done"],
+    failed: ["destructive", "Failed"],
+  };
+  const [variant, label] = map[status] ?? ["outline", status];
+  return <Badge variant={variant} className="shrink-0 text-xs">{label}</Badge>;
+}
+
+function GamingNewsPage({ notify }) {
+  const addLink = useAction(api.addManualNewsLink.addManualNewsLink);
+  const recentNews = useQuery(api.gamingNews.listRecentGamingNews);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!url.trim() || busy) return;
+    setBusy(true);
+    try {
+      const result = await addLink({ url: url.trim() });
+      notify("success", "News Article Queued", result);
+      setUrl("");
+    } catch (err) {
+      notify("error", "Failed to Add News", err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <h2 className="text-xl font-bold">Gaming News</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Paste a news article URL — it will be fetched, summarized by AI, and written as a WordPress draft automatically.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Add News Link</CardTitle>
+          <CardDescription>
+            Any publicly accessible gaming news article URL works.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://www.ign.com/articles/..."
+              disabled={busy}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={busy || !url.trim()}>
+              {busy
+                ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Processing...</>
+                : <><Plus className="h-3.5 w-3.5" /> Add</>
+              }
+            </Button>
+          </form>
+          {busy && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Fetching article and generating metadata... this takes about 15-30 seconds.
+              The article write will run in the background after.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Articles</CardTitle>
+          <CardDescription>Last 30 collected gaming news items</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!recentNews ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : recentNews.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No articles yet.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {recentNews.map((item) => (
+                <div key={item._id} className="py-3 flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-snug">
+                      {item.articleTitle || item.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatDateTime(item.collectedAt)}
+                    </p>
+                    {item.status === "failed" && item.error && (
+                      <p className="text-xs text-red-400 mt-1 line-clamp-2">{item.error}</p>
+                    )}
+                    {item.wordpressUrl && (
+                      <a
+                        href={item.wordpressUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-info hover:underline inline-flex items-center gap-1 mt-1"
+                      >
+                        View WordPress Draft <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  <GamingNewsStatusBadge status={item.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
 
 function PuzzlesPage({ notify }) {
   const syncNyt = useAction(api.syncNytPuzzles.syncNytPuzzles);

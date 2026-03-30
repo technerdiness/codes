@@ -38,6 +38,64 @@ interface GroupedTopic {
   sourceUrls: string[];
 }
 
+// ── Priority Keyword Buckets ──────────────────────────────────────────────────
+
+// Bucket 1: specific games we always want to cover
+const BUCKET_1_KEYWORDS = [
+  // GTA / Rockstar
+  "GTA", "Grand Theft Auto", "Rockstar Games", "Rockstar",
+  // Fortnite
+  "Fortnite",
+  // Marvel Rivals
+  "Marvel Rivals",
+  // Minecraft
+  "Minecraft", "Mojang",
+  // Pokemon
+  "Pokemon", "Pokémon",
+  // Roblox
+  "Roblox", "Robux",
+  // PUBG
+  "PUBG", "PUBG Mobile", "Battlegrounds", "Krafton",
+  // Call of Duty
+  "Call of Duty", "Warzone", "Black Ops", "Modern Warfare", "Activision", "Treyarch", "Infinity Ward",
+];
+
+// Bucket 2: platforms & major publishers
+const BUCKET_2_KEYWORDS = [
+  // Epic Games
+  "Epic Games", "Epic Games Store", "Tim Sweeney",
+  // PlayStation
+  "PlayStation", "PS5", "PS4", "PS6", "Sony", "PSN", "PlayStation Network",
+  // Xbox
+  "Xbox", "Game Pass", "Xbox Game Pass", "Microsoft Gaming", "Phil Spencer",
+];
+
+function getItemBucket(item: RssFeedItem): 1 | 2 | 3 {
+  const titleLower = item.title.toLowerCase();
+  for (const kw of BUCKET_1_KEYWORDS) {
+    if (titleLower.includes(kw.toLowerCase())) return 1;
+  }
+  for (const kw of BUCKET_2_KEYWORDS) {
+    if (titleLower.includes(kw.toLowerCase())) return 2;
+  }
+  return 3;
+}
+
+function computeAllocation(
+  b1Count: number,
+  b2Count: number,
+  b3Count: number,
+  total: number
+): { b1: number; b2: number; b3: number } {
+  // Ideal: 3 from B1, 2 from B2, 0 from B3
+  const b1Alloc = Math.min(b1Count, 3);
+  const afterB1 = total - b1Alloc;
+  const b2Alloc = Math.min(b2Count, afterB1);
+  const afterB2 = afterB1 - b2Alloc;
+  const b3Alloc = Math.min(b3Count, afterB2);
+  return { b1: b1Alloc, b2: b2Alloc, b3: b3Alloc };
+}
+
 // ── Source Priority (higher = preferred) ────────────────────────────────────
 
 const SOURCE_PRIORITY: Record<string, number> = {
@@ -55,6 +113,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "Dexerto": 3,
   "VG247": 3,
   "The Verge Gaming": 2,
+  "Digital Trends Gaming": 2,
 };
 
 const MAX_SOURCES_PER_TOPIC = 5;
@@ -76,6 +135,7 @@ const RSS_FEEDS: { name: string; url: string }[] = [
   { name: "Destructoid", url: "https://www.destructoid.com/feed/" },
   { name: "Dexerto", url: "https://www.dexerto.com/gaming/feed/" },
   { name: "VG247", url: "https://www.vg247.com/feed" },
+  { name: "Digital Trends Gaming", url: "https://www.digitaltrends.com/gaming/feed/" },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -405,51 +465,83 @@ async function fetchNewsApi(): Promise<RssFeedItem[]> {
 // ── Groq AI: Topic Selection & Deduplication ───────────────────────────────
 
 async function selectTopicsWithGroq(
-  items: RssFeedItem[],
-  existingSlugs: { slug: string; title: string }[],
-  count: number
+  b1Items: RssFeedItem[],
+  b2Items: RssFeedItem[],
+  b3Items: RssFeedItem[],
+  allocation: { b1: number; b2: number; b3: number },
+  existingSlugs: { slug: string; title: string }[]
 ): Promise<GroupedTopic[]> {
   const groqApiKey = process.env.GROQ_API_KEY?.trim();
   if (!groqApiKey) {
     throw new Error("GROQ_API_KEY environment variable is required");
   }
 
-  // Prepare condensed feed items for the prompt (cap at 150 items, shorter descriptions)
-  const cappedItems = items.slice(0, 150);
-  const feedSummary = cappedItems
-    .map(
-      (item, i) =>
-        `[${i}] "${item.title}" — ${item.source} — ${item.description.slice(0, 100)}`
-    )
-    .join("\n");
-
   const existingTopics = existingSlugs.length
     ? existingSlugs.map((s) => `- "${s.title}" (slug: ${s.slug})`).join("\n")
     : "None";
 
-  const prompt = `You are a gaming news editor. Below are ${items.length} recent gaming news items from various sources.
+  // Format each bucket's items with prefixed indices for unambiguous mapping
+  const formatBucket = (items: RssFeedItem[], prefix: string, cap: number) =>
+    items
+      .slice(0, cap)
+      .map(
+        (item, i) =>
+          `[${prefix}-${i}] "${item.title}" — ${item.source} — ${item.description.slice(0, 100)}`
+      )
+      .join("\n") || "(no items)";
 
-Your job:
-1. Group items that cover the SAME news story/event together
-2. ONLY select gaming-focused news. Filter out general tech news, non-gaming content, opinion pieces, reviews, guides, tips articles, and "best of" lists. If a story is primarily about tech/business and only tangentially involves gaming, skip it.
-3. Pick the top ${count} most newsworthy, interesting gaming news TOPICS. When ranking, give priority to news about these games/brands: GTA, Epic Games, Fortnite, Marvel Rivals, Minecraft, Pokemon, Roblox, PUBG Mobile, PlayStation, Xbox, Call of Duty. If there is newsworthy content about any of these, prefer it over less well-known titles. Still pick other gaming news if nothing relevant exists for these.
-4. CRITICAL: Do NOT pick ANY topic that is the same as or overlaps with these ALREADY-COVERED stories. Even if the angle is slightly different, if it's about the same core event/news, SKIP IT:
+  const b1Section = formatBucket(b1Items, "B1", 60);
+  const b2Section = formatBucket(b2Items, "B2", 50);
+  const b3Section = formatBucket(b3Items, "B3", 40);
+
+  const totalNeeded = allocation.b1 + allocation.b2 + allocation.b3;
+
+  const prompt = `You are a gaming news editor. Select the most newsworthy gaming news topics from the items below.
+
+SELECTION RULES (follow exactly):
+- Select exactly ${allocation.b1} topic(s) from BUCKET 1
+- Select exactly ${allocation.b2} topic(s) from BUCKET 2
+- Select exactly ${allocation.b3} topic(s) from BUCKET 3
+- Total: ${totalNeeded} topics
+- If a bucket has fewer distinct stories than its allocation, return as many as exist from that bucket (do not pad with lower-quality stories)
+- Group items that cover the SAME news story together under one topic
+- ONLY select news stories. Skip opinion pieces, reviews, guides, tips, and "best of" lists
+- Do NOT pick any topic that overlaps with already-covered stories
+
+ALREADY COVERED (do not repeat):
 ${existingTopics}
 
-NEWS ITEMS:
-${feedSummary}
+---
 
-Return EXACTLY a JSON array of ${count} objects. Each object:
+## BUCKET 1 — Priority Games (GTA, Fortnite, Marvel Rivals, Minecraft, Pokemon, Roblox, PUBG, Call of Duty)
+${b1Section}
+
+## BUCKET 2 — Platforms & Publishers (Epic Games, PlayStation, Xbox)
+${b2Section}
+
+## BUCKET 3 — Other Gaming News
+${b3Section}
+
+---
+
+Return a JSON object with exactly this structure:
 {
-  "title": "Detailed, descriptive news headline that clearly explains what happened (not clickbait, but informative and specific)",
-  "slug": "url-friendly-slug",
-  "summary": "2-3 sentence summary of the news story",
-  "itemIndices": [array of item index numbers that cover this same story]
+  "bucket1": [
+    {
+      "title": "Descriptive news headline",
+      "slug": "url-friendly-slug",
+      "summary": "2-3 sentence summary of the story",
+      "itemIndices": ["B1-0", "B1-2"]
+    }
+  ],
+  "bucket2": [...],
+  "bucket3": [...]
 }
 
-IMPORTANT: Double-check every topic against the already-covered list above. If a topic even partially overlaps, replace it with a different one.
-
-Return ONLY the JSON array, no markdown, no explanation.`;
+Rules:
+- itemIndices must use the exact prefixed format (e.g. "B1-0", "B2-3", "B3-1")
+- Items from one bucket must only appear in that bucket's topics
+- Return ONLY the JSON object, no markdown, no explanation.`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -476,45 +568,55 @@ Return ONLY the JSON array, no markdown, no explanation.`;
 
   const content = data.choices[0]?.message?.content ?? "";
 
-  // Parse the JSON from the response (handle potential markdown wrapping)
-  const jsonMatch = content.match(/\[[\s\S]*\]/);
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error(`Groq returned no valid JSON array. Response: ${content.slice(0, 500)}`);
+    throw new Error(`Groq returned no valid JSON object. Response: ${content.slice(0, 500)}`);
   }
 
-  const topics = JSON.parse(jsonMatch[0]) as {
-    title: string;
-    slug: string;
-    summary: string;
-    itemIndices: number[];
-  }[];
+  const parsed = JSON.parse(jsonMatch[0]) as {
+    bucket1?: { title: string; slug: string; summary: string; itemIndices: string[] }[];
+    bucket2?: { title: string; slug: string; summary: string; itemIndices: string[] }[];
+    bucket3?: { title: string; slug: string; summary: string; itemIndices: string[] }[];
+  };
 
-  // Map back to full GroupedTopic objects
-  const mapped = topics.slice(0, count).map((topic) => {
-    const relatedItems = topic.itemIndices
-      .map((i) => cappedItems[i])
-      .filter(Boolean);
+  // Build lookup maps for each bucket
+  const b1Map = new Map(b1Items.slice(0, 60).map((item, i) => [`B1-${i}`, item]));
+  const b2Map = new Map(b2Items.slice(0, 50).map((item, i) => [`B2-${i}`, item]));
+  const b3Map = new Map(b3Items.slice(0, 40).map((item, i) => [`B3-${i}`, item]));
+  const allMap = new Map([...b1Map, ...b2Map, ...b3Map]);
 
-    return {
-      title: topic.title,
-      slug: slugify(topic.slug || topic.title),
-      summary: topic.summary,
-      sourceUrls: [...new Set(relatedItems.map((item) => item.link))],
-      sourceSnippets: relatedItems.map((item) => ({
-        source: item.source,
-        title: item.title,
-        snippet: item.description.slice(0, 300),
-        url: item.link,
-        publishedAt: item.pubDate || undefined,
-      })),
-    };
-  });
+  const mapTopics = (
+    rawTopics: { title: string; slug: string; summary: string; itemIndices: string[] }[]
+  ): GroupedTopic[] =>
+    rawTopics.map((topic) => {
+      const relatedItems = topic.itemIndices
+        .map((idx) => allMap.get(idx))
+        .filter(Boolean) as RssFeedItem[];
+      return {
+        title: topic.title,
+        slug: slugify(topic.slug || topic.title),
+        summary: topic.summary,
+        sourceUrls: [...new Set(relatedItems.map((item) => item.link))],
+        sourceSnippets: relatedItems.map((item) => ({
+          source: item.source,
+          title: item.title,
+          snippet: item.description.slice(0, 300),
+          url: item.link,
+          publishedAt: item.pubDate || undefined,
+        })),
+      };
+    });
 
-  // Verify with a second AI call to filter out any topics that overlap with existing
+  const allTopics = [
+    ...mapTopics(parsed.bucket1 ?? []),
+    ...mapTopics(parsed.bucket2 ?? []),
+    ...mapTopics(parsed.bucket3 ?? []),
+  ];
+
   if (existingSlugs.length > 0) {
-    return await verifyNoDuplicates(mapped, existingSlugs, groqApiKey);
+    return await verifyNoDuplicates(allTopics, existingSlugs, groqApiKey);
   }
-  return mapped;
+  return allTopics;
 }
 
 // ── Groq AI: Duplicate Verification ────────────────────────────────────────
@@ -653,9 +755,21 @@ async function handleCollectGamingNews(
   );
   console.log(`Existing topics in last 7 days: ${existingSlugs.length}`);
 
-  // 4. Use Groq to select and deduplicate top topics
-  console.log(`Selecting top ${count} topics with Groq...`);
-  const topics = await selectTopicsWithGroq(recentItems, existingSlugs, count);
+  // 4. Bucket items by priority keywords
+  const b1Items = recentItems.filter((item) => getItemBucket(item) === 1);
+  const b2Items = recentItems.filter((item) => getItemBucket(item) === 2);
+  const b3Items = recentItems.filter((item) => getItemBucket(item) === 3);
+  const allocation = computeAllocation(b1Items.length, b2Items.length, b3Items.length, count);
+
+  console.log(
+    `Bucket breakdown — B1 (games): ${b1Items.length} items → alloc ${allocation.b1}, ` +
+    `B2 (platforms): ${b2Items.length} items → alloc ${allocation.b2}, ` +
+    `B3 (other): ${b3Items.length} items → alloc ${allocation.b3}`
+  );
+
+  // 5. Use Groq to select and deduplicate top topics
+  console.log(`Selecting ${count} topics with Groq (bucketed)...`);
+  const topics = await selectTopicsWithGroq(b1Items, b2Items, b3Items, allocation, existingSlugs);
   // Hard filter: remove any topics whose slugs already exist in DB
   const existingSlugSet = new Set(existingSlugs.map((s) => s.slug));
   const freshTopics = topics.filter((topic) => {
