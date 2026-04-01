@@ -48,6 +48,7 @@ const NAV = [
   { id: "codes", label: "Game Codes", icon: Gamepad2 },
   { id: "puzzles", label: "Puzzles", icon: Puzzle },
   { id: "gaming-news", label: "Gaming News", icon: Newspaper },
+  { id: "articles", label: "Articles", icon: Pencil },
   { id: "post-online", label: "Post Online", icon: Share2 },
 ];
 
@@ -415,6 +416,7 @@ function Dashboard() {
           {view === "codes" && <CodesPage notify={notify} />}
           {view === "puzzles" && <PuzzlesPage notify={notify} />}
           {view === "gaming-news" && <GamingNewsPage notify={notify} />}
+          {view === "articles" && <ArticlesPage notify={notify} />}
           {view === "post-online" && <PostOnlinePage notify={notify} />}
         </div>
       </main>
@@ -1387,6 +1389,214 @@ function PuzzlesPage({ notify }) {
           );
         })}
       </div>
+    </>
+  );
+}
+
+// ── Articles Page ──────────────────────────────────────────────────────────
+
+const ARTICLE_TYPES = [
+  {
+    id: "listicle",
+    label: "Listicle",
+    description: "Best X, top picks, ranked lists — organized around a list of things",
+  },
+  {
+    id: "explainer",
+    label: "Explainer",
+    description: "Break down a topic so readers walk away actually understanding it",
+  },
+  {
+    id: "howto",
+    label: "How-to",
+    description: "Step-by-step guide walking readers through doing something",
+  },
+];
+
+function ArticleStatusBadge({ status }) {
+  const map = {
+    pending: ["outline", "Pending"],
+    writing: ["info", "Writing"],
+    completed: ["success", "Done"],
+    failed: ["destructive", "Failed"],
+  };
+  const [variant, label] = map[status] ?? ["outline", status];
+  return <Badge variant={variant} className="shrink-0 text-xs">{label}</Badge>;
+}
+
+function ArticlesPage({ notify }) {
+  const writeArticle = useAction(api.writeNormalArticle.writeNormalArticle);
+  const recentArticles = useQuery(api.normalArticles.listRecent);
+
+  const [urls, setUrls] = useState([""]);
+  const [articleType, setArticleType] = useState("listicle");
+  const [busy, setBusy] = useState(false);
+
+  function addUrl() {
+    setUrls((prev) => [...prev, ""]);
+  }
+
+  function removeUrl(i) {
+    setUrls((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function updateUrl(i, val) {
+    setUrls((prev) => prev.map((u, idx) => (idx === i ? val : u)));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const validUrls = urls.map((u) => u.trim()).filter((u) => u.startsWith("http"));
+    if (validUrls.length === 0 || busy) return;
+    setBusy(true);
+    try {
+      const result = await writeArticle({ sourceUrls: validUrls, articleType });
+      notify("success", "Article Written", result);
+      setUrls([""]);
+    } catch (err) {
+      notify("error", "Failed to Write Article", err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const validUrlCount = urls.filter((u) => u.trim().startsWith("http")).length;
+
+  return (
+    <>
+      <div>
+        <h2 className="text-xl font-bold">Articles</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Provide one or more source URLs, pick the article type, and AI will write and publish a WordPress draft.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Write an Article</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Source URLs */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Source URLs</p>
+              {urls.map((url, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={url}
+                    onChange={(e) => updateUrl(i, e.target.value)}
+                    placeholder="https://..."
+                    disabled={busy}
+                    className="flex-1"
+                  />
+                  {urls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeUrl(i)}
+                      disabled={busy}
+                      className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addUrl}
+                disabled={busy}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+              >
+                <Plus className="h-3 w-3" /> Add another source
+              </button>
+            </div>
+
+            {/* Article Type */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Article Type</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {ARTICLE_TYPES.map((type) => (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setArticleType(type.id)}
+                    disabled={busy}
+                    className={cn(
+                      "text-left rounded-lg border p-3 transition-colors",
+                      articleType === type.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/50"
+                    )}
+                  >
+                    <p className="text-sm font-medium">{type.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{type.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button type="submit" disabled={busy || validUrlCount === 0}>
+              {busy ? (
+                <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Writing Article...</>
+              ) : (
+                <><Zap className="h-3.5 w-3.5" /> Write Article</>
+              )}
+            </Button>
+
+            {busy && (
+              <p className="text-xs text-muted-foreground">
+                Fetching sources and writing with AI... this takes about 30-60 seconds.
+              </p>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Articles</CardTitle>
+          <CardDescription>Last 30 written articles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!recentArticles ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : recentArticles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No articles yet.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {recentArticles.map((item) => {
+                const typeLabel = ARTICLE_TYPES.find((t) => t.id === item.articleType)?.label ?? item.articleType;
+                return (
+                  <div key={item._id} className="py-3 flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium leading-snug">
+                        {item.articleTitle || item.sourceUrls[0]}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {typeLabel} · {formatDateTime(item.createdAt)}
+                      </p>
+                      {item.status === "failed" && item.error && (
+                        <p className="text-xs text-red-400 mt-1 line-clamp-2">{item.error}</p>
+                      )}
+                      {item.wordpressUrl && (
+                        <a
+                          href={item.wordpressUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-info hover:underline inline-flex items-center gap-1 mt-1"
+                        >
+                          View WordPress Draft <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    <ArticleStatusBadge status={item.status} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }

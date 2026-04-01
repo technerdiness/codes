@@ -23,8 +23,10 @@ import type * as lib_providers_beebomLetroso from "../lib/providers/beebomLetros
 import type * as lib_providers_techwiser from "../lib/providers/techwiser.js";
 import type * as lib_types from "../lib/types.js";
 import type * as lib_wordpress from "../lib/wordpress.js";
+import type * as normalArticles from "../normalArticles.js";
 import type * as nytAnswers from "../nytAnswers.js";
 import type * as postCodesToX from "../postCodesToX.js";
+import type * as postNewsToX from "../postNewsToX.js";
 import type * as resolveWordpressPostId from "../resolveWordpressPostId.js";
 import type * as syncCodes from "../syncCodes.js";
 import type * as syncLetroso from "../syncLetroso.js";
@@ -33,6 +35,7 @@ import type * as syncRuns from "../syncRuns.js";
 import type * as twitterCodes from "../twitterCodes.js";
 import type * as wordpressState from "../wordpressState.js";
 import type * as writeGamingNewsArticle from "../writeGamingNewsArticle.js";
+import type * as writeNormalArticle from "../writeNormalArticle.js";
 
 import type {
   ApiFromModules,
@@ -56,8 +59,10 @@ declare const fullApi: ApiFromModules<{
   "lib/providers/techwiser": typeof lib_providers_techwiser;
   "lib/types": typeof lib_types;
   "lib/wordpress": typeof lib_wordpress;
+  normalArticles: typeof normalArticles;
   nytAnswers: typeof nytAnswers;
   postCodesToX: typeof postCodesToX;
+  postNewsToX: typeof postNewsToX;
   resolveWordpressPostId: typeof resolveWordpressPostId;
   syncCodes: typeof syncCodes;
   syncLetroso: typeof syncLetroso;
@@ -66,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   twitterCodes: typeof twitterCodes;
   wordpressState: typeof wordpressState;
   writeGamingNewsArticle: typeof writeGamingNewsArticle;
+  writeNormalArticle: typeof writeNormalArticle;
 }>;
 
 /**

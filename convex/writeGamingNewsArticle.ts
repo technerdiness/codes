@@ -155,17 +155,16 @@ REQUIREMENTS:
 TITLE RULES (very important):
 - Do NOT write generic news headlines like "Company X Announces Y, Z Faces Challenges Ahead"
 - Write the title like a friend telling another friend about something interesting that happened
+- Include all the clear details to make the title SEO friendly while keeping the tone. 
 - Keep it conversational, simple, curious, and in the same tone as the article itself
 - It should make someone want to click and read, not sound like a press release
-- Examples of BAD titles: "Epic Games Lays Off Over 1,000 Staff, Fortnite Development Faces Big Challenges Ahead"
-- Examples of GOOD titles: "Epic Just Fired Over 1,000 People and Fortnite Might Never Be the Same"
 
 META DESCRIPTION RULES:
 - 150-160 characters, conversational, same tone as the article
 
 FORMAT YOUR RESPONSE AS JSON:
 {
-  "title": "Your conversational, curiosity-driven title here",
+  "title": "Your conversational, curiosity-driven informative SEO friendly title here",
   "html": "<p>First paragraph...</p>\\n\\n<h2>Subheading</h2>\\n\\n<p>More content...</p>",
   "metaDescription": "Your 150-160 char conversational meta description here"
 }

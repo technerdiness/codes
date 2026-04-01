@@ -12,9 +12,16 @@ export const findUnpostedGame = internalQuery({
       .order("asc")
       .take(500);
 
-    const firstUnposted = activeCodes.find((c) => c.postedOnX !== true);
-    if (!firstUnposted) return null;
-    return { gameName: firstUnposted.gameName, articleId: firstUnposted.articleId };
+    const unposted = activeCodes.filter((c) => c.postedOnX !== true);
+
+    // Only pick games that have a GamingWize article URL
+    for (const code of unposted) {
+      const article = await ctx.db.get(code.articleId);
+      if (article?.gamingwizeArticleUrl) {
+        return { gameName: code.gameName, articleId: code.articleId };
+      }
+    }
+    return null;
   },
 });
 
@@ -39,6 +46,7 @@ export const getGameDataForTweet = internalQuery({
 
 // Public query: list all games that have unposted active codes, ordered by oldest first.
 // Returns each game once, with the count of unposted codes and whether a GW URL exists.
+// Deduplicates article lookups — one db.get per unique game, not per code.
 export const listUnpostedGames = query({
   args: {},
   handler: async (ctx) => {
@@ -50,7 +58,7 @@ export const listUnpostedGames = query({
 
     const unposted = activeCodes.filter((c) => c.postedOnX !== true);
 
-    // Group by gameName, preserving insertion order (oldest-first from the query)
+    // Group by gameName — one entry per game, count unposted codes
     const gameMap = new Map<string, { gameName: string; articleId: string; unpostedCount: number }>();
     for (const c of unposted) {
       if (!gameMap.has(c.gameName)) {
@@ -59,7 +67,7 @@ export const listUnpostedGames = query({
       gameMap.get(c.gameName)!.unpostedCount++;
     }
 
-    // Fetch GW URLs for each game's article
+    // One db.get per unique game (not per code)
     const result = [];
     for (const entry of gameMap.values()) {
       const article = await ctx.db.get(entry.articleId as any);

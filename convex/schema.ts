@@ -149,6 +149,22 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_collected_at", ["collectedAt"]),
 
+  normalArticles: defineTable({
+    sourceUrls: v.array(v.string()),
+    articleType: v.string(), // "listicle" | "explainer" | "howto"
+    status: v.string(), // "pending" | "writing" | "completed" | "failed"
+    createdAt: v.string(),
+    articleTitle: v.optional(v.string()),
+    articleHtml: v.optional(v.string()),
+    metaDescription: v.optional(v.string()),
+    wordpressPostId: v.optional(v.number()),
+    wordpressUrl: v.optional(v.string()),
+    writtenAt: v.optional(v.string()),
+    error: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_created_at", ["createdAt"]),
+
   syncRuns: defineTable({
     automationType: v.string(), // "game_codes" | "nyt_puzzles" | "letroso" | "collect_gaming_news" | "write_gaming_news"
     ranAt: v.string(),
