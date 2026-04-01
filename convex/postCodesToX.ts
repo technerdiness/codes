@@ -63,62 +63,66 @@ function formatTweet(
   return header + urlSuffix;
 }
 
+async function handlePostCodesToX(ctx: any) {
+  // 1. Find the game with the oldest unposted active code
+  const gameInfo = await ctx.runQuery(internal.twitterCodes.findUnpostedGame, {});
+  if (!gameInfo) {
+    console.log("No unposted active codes found — nothing to post.");
+    return null;
+  }
+
+  // 2. Get all active codes for that game + the gamingwize article URL
+  const { codes, gameUrl } = (await ctx.runQuery(
+    internal.twitterCodes.getGameDataForTweet,
+    { gameName: gameInfo.gameName, articleId: gameInfo.articleId }
+  )) as { codes: { _id: Id<"codes">; code: string; rewardsText?: string }[]; gameUrl: string | null };
+
+  if (codes.length === 0) {
+    console.log(`No active codes for ${gameInfo.gameName} — skipping.`);
+    return null;
+  }
+
+  // 3. Format the tweet
+  const tweet = formatTweet(gameInfo.gameName, codes, gameUrl);
+  console.log(
+    `Posting tweet for ${gameInfo.gameName} (${codes.length} active codes):\n${tweet}`
+  );
+
+  // 4. Post to Twitter via API v2
+  const apiKey = process.env.TWITTER_API_KEY;
+  const apiSecret = process.env.TWITTER_API_SECRET;
+  const accessToken = process.env.TWITTER_ACCESS_TOKEN;
+  const accessSecret = process.env.TWITTER_ACCESS_SECRET;
+
+  if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
+    throw new Error(
+      "Twitter API credentials missing. Set TWITTER_API_KEY, TWITTER_API_SECRET, " +
+        "TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_SECRET in Convex environment variables."
+    );
+  }
+
+  const client = new TwitterApi({
+    appKey: apiKey,
+    appSecret: apiSecret,
+    accessToken,
+    accessSecret,
+  });
+
+  await client.v2.tweet(tweet);
+  console.log(`Tweet posted for ${gameInfo.gameName}.`);
+
+  // 5. Mark all active codes for this game as posted on X
+  await ctx.runMutation(internal.twitterCodes.markCodesAsPosted, {
+    codeIds: codes.map((c) => c._id),
+  });
+
+  return { gameName: gameInfo.gameName, codesPosted: codes.length };
+}
+
 export const run = internalAction({
   args: {},
   handler: async (ctx) => {
-    // 1. Find the game with the oldest unposted active code
-    const gameInfo = await ctx.runQuery(internal.twitterCodes.findUnpostedGame, {});
-    if (!gameInfo) {
-      console.log("No unposted active codes found — nothing to post.");
-      return null;
-    }
-
-    // 2. Get all active codes for that game + the gamingwize article URL
-    const { codes, gameUrl } = (await ctx.runQuery(
-      internal.twitterCodes.getGameDataForTweet,
-      { gameName: gameInfo.gameName, articleId: gameInfo.articleId }
-    )) as { codes: { _id: Id<"codes">; code: string; rewardsText?: string }[]; gameUrl: string | null };
-
-    if (codes.length === 0) {
-      console.log(`No active codes for ${gameInfo.gameName} — skipping.`);
-      return null;
-    }
-
-    // 3. Format the tweet
-    const tweet = formatTweet(gameInfo.gameName, codes, gameUrl);
-    console.log(
-      `Posting tweet for ${gameInfo.gameName} (${codes.length} active codes):\n${tweet}`
-    );
-
-    // 4. Post to Twitter via API v2
-    const apiKey = process.env.TWITTER_API_KEY;
-    const apiSecret = process.env.TWITTER_API_SECRET;
-    const accessToken = process.env.TWITTER_ACCESS_TOKEN;
-    const accessSecret = process.env.TWITTER_ACCESS_SECRET;
-
-    if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
-      throw new Error(
-        "Twitter API credentials missing. Set TWITTER_API_KEY, TWITTER_API_SECRET, " +
-          "TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_SECRET in Convex environment variables."
-      );
-    }
-
-    const client = new TwitterApi({
-      appKey: apiKey,
-      appSecret: apiSecret,
-      accessToken,
-      accessSecret,
-    });
-
-    await client.v2.tweet(tweet);
-    console.log(`Tweet posted for ${gameInfo.gameName}.`);
-
-    // 5. Mark all active codes for this game as posted on X
-    await ctx.runMutation(internal.twitterCodes.markCodesAsPosted, {
-      codeIds: codes.map((c) => c._id),
-    });
-
-    return { gameName: gameInfo.gameName, codesPosted: codes.length };
+    return await handlePostCodesToX(ctx);
   },
 });
 
@@ -126,6 +130,6 @@ export const run = internalAction({
 export const postNextGame = action({
   args: {},
   handler: async (ctx) => {
-    return await ctx.runAction(internal.postCodesToX.run, {});
+    return await handlePostCodesToX(ctx);
   },
 });
