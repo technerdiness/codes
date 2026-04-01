@@ -67,4 +67,12 @@ crons.cron(
   {},
 );
 
+// Post one game's active codes to X every 2 hours
+crons.cron(
+  "post-codes-to-x-every-2-hours",
+  "0 */2 * * *",
+  internal.postCodesToX.run,
+  {},
+);
+
 export default crons;

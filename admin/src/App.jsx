@@ -38,6 +38,7 @@ import {
   AlertCircle,
   SlidersHorizontal,
   Newspaper,
+  Share2,
 } from "lucide-react";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ const NAV = [
   { id: "codes", label: "Game Codes", icon: Gamepad2 },
   { id: "puzzles", label: "Puzzles", icon: Puzzle },
   { id: "gaming-news", label: "Gaming News", icon: Newspaper },
+  { id: "post-online", label: "Post Online", icon: Share2 },
 ];
 
 const EMPTY_EDITOR = {
@@ -413,7 +415,7 @@ function Dashboard() {
           {view === "codes" && <CodesPage notify={notify} />}
           {view === "puzzles" && <PuzzlesPage notify={notify} />}
           {view === "gaming-news" && <GamingNewsPage notify={notify} />}
-          {/* Articles tab removed — Game Codes handles everything */}
+          {view === "post-online" && <PostOnlinePage notify={notify} />}
         </div>
       </main>
 
@@ -497,7 +499,6 @@ function AutomationCard({ meta, run, loading }) {
   const Icon = meta.icon;
   const hasIssues = run && run.issueCount > 0;
 
-  // Group issues by their "group" field
   const groupedIssues = {};
   if (run) {
     for (const issue of run.issues) {
@@ -507,50 +508,54 @@ function AutomationCard({ meta, run, loading }) {
   }
 
   return (
-    <Card className={cn(hasIssues && "border-red-300 dark:border-red-700")}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+    <Card className={cn(hasIssues && "border-red-200 dark:border-red-800")}>
+      <CardContent className="p-4">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg",
-              hasIssues ? "bg-red-100 dark:bg-red-900" : "bg-accent"
-            )}>
-              <Icon className={cn("h-4 w-4", hasIssues && "text-red-600 dark:text-red-400")} />
-            </div>
-            <CardTitle className="text-sm">{meta.label}</CardTitle>
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">{meta.label}</span>
           </div>
-          {run && (
-            <span className="text-xs text-muted-foreground">{timeAgo(run.ranAt)}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {run && (
+              <span className="text-xs text-muted-foreground">{timeAgo(run.ranAt)}</span>
+            )}
+            {run && !hasIssues && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">
+                <Check className="h-3 w-3" /> OK
+              </span>
+            )}
+            {hasIssues && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900 dark:text-red-300">
+                <AlertCircle className="h-3 w-3" /> {run.issueCount} issue{run.issueCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {loading && (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        )}
-        {!loading && !run && (
-          <p className="text-sm text-muted-foreground">No runs recorded yet.</p>
-        )}
+
+        {/* Body */}
+        {loading && <p className="text-xs text-muted-foreground">Loading...</p>}
+        {!loading && !run && <p className="text-xs text-muted-foreground">No runs recorded yet.</p>}
         {run && !hasIssues && (
-          <p className="text-sm text-muted-foreground">
-            {run.updatedCount} updated · no issues
-          </p>
+          <p className="text-xs text-muted-foreground">{run.updatedCount} updated</p>
         )}
         {run && hasIssues && (
-          <div className="mt-2 space-y-3">
-            <p className="text-sm font-medium text-red-700 dark:text-red-400">
-              {run.updatedCount} updated · {run.issueCount} issue{run.issueCount !== 1 ? "s" : ""}
-            </p>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">{run.updatedCount} updated</p>
             {Object.entries(groupedIssues).map(([group, items]) => (
               <div key={group}>
-                <p className="text-sm font-semibold mb-1">
-                  {group} has {items.length} issue{items.length !== 1 ? "s" : ""}
+                <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1.5">
+                  {group} — {items.length} {items.length === 1 ? "issue" : "issues"}
                 </p>
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {items.map((issue, i) => (
-                    <div key={i} className="rounded-md bg-muted px-3 py-2 text-xs space-y-0.5">
-                      <p className="font-medium">{issue.identifier}</p>
-                      <p className="text-muted-foreground">{issue.reason}</p>
+                    <div key={i} className="flex gap-2 text-xs">
+                      <span className="shrink-0 font-medium w-36 truncate" title={issue.identifier}>
+                        {issue.identifier}
+                      </span>
+                      <span className="text-muted-foreground truncate" title={issue.reason}>
+                        {issue.reason}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1382,6 +1387,102 @@ function PuzzlesPage({ notify }) {
           );
         })}
       </div>
+    </>
+  );
+}
+
+// ── Post Online Page ───────────────────────────────────────────────────────
+
+function PostOnlinePage({ notify }) {
+  const postAction = useAction(api.postCodesToX.postNextGame);
+  const queue = useQuery(api.twitterCodes.listUnpostedGames);
+  const [busy, setBusy] = useState(false);
+
+  async function handlePost() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await postAction({});
+      if (result) {
+        notify("success", `Posted: ${result.gameName}`, result);
+      } else {
+        notify("success", "Nothing to post", "All active codes have already been posted.");
+      }
+    } catch (e) {
+      notify("error", "Post failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Post Online</h2>
+        <p className="text-muted-foreground">
+          Manually post the next game's active codes to X.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Post Next Game to X</CardTitle>
+          <CardDescription>
+            Posts the oldest unposted game's active codes as a tweet, then marks them as posted.
+            The cron runs this automatically every 2 hours.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => {
+              if (window.confirm("Post the next game's codes to X now?")) handlePost();
+            }}
+            disabled={busy || queue?.length === 0}
+          >
+            {busy ? (
+              <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Posting...</>
+            ) : (
+              <><Share2 className="h-3.5 w-3.5" /> Post Next Game</>
+            )}
+          </Button>
+          {queue?.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              All active codes have been posted.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Posting Queue</CardTitle>
+          <CardDescription>
+            Games with unposted active codes, oldest first.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!queue ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : queue.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Queue is empty — all caught up.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {queue.map((item, i) => (
+                <div key={item.gameName} className="py-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                    <p className="text-sm font-medium truncate">{item.gameName}</p>
+                    {!item.hasGamingwizeUrl && (
+                      <Badge variant="warning">No GW URL</Badge>
+                    )}
+                  </div>
+                  <Badge variant="outline">{item.unpostedCount} unposted</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }

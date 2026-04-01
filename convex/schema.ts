@@ -30,11 +30,13 @@ export default defineSchema({
     isNew: v.boolean(),
     firstSeenAt: v.string(),
     lastSeenAt: v.string(),
+    postedOnX: v.optional(v.boolean()),
   })
     .index("by_article_id", ["articleId"])
     .index("by_article_and_code", ["articleId", "code"])
     .index("by_game_name", ["gameName"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_status_and_postedOnX", ["status", "postedOnX"]),
 
   technerdinessWordpressState: defineTable({
     articleId: v.id("articles"),

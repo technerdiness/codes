@@ -434,17 +434,31 @@ async function handleSyncCodes(
   if (!dryRun) {
     const issues: { group: string; identifier: string; reason: string }[] = [];
 
-    // Beebom scraping failures (whole article failed)
+    // Article-level failures — could be a scrape error or a WordPress error that bubbled up
     for (const f of failures) {
-      issues.push({ group: "Beebom scraping", identifier: f.gameName, reason: f.reason });
+      let group = "Scraping";
+      let reason = f.reason;
+      if (f.reason.includes("Tech Nerdiness:")) {
+        group = "Tech Nerdiness update";
+        reason = f.reason.replace(/^Tech Nerdiness:\s*/, "");
+      } else if (f.reason.includes("Gaming Wize:")) {
+        group = "Gaming Wize update";
+        reason = f.reason.replace(/^Gaming Wize:\s*/, "");
+      }
+      // Strip HTML comment instructions from error messages
+      reason = reason.replace(/\s*Add <!--.*?-->\s*(and\s*<!--.*?-->\s*)?to the article content\.?/gi, "").trim();
+      issues.push({ group, identifier: f.gameName, reason });
     }
 
-    // WordPress update errors per site
+    // WordPress update errors per site (from articles that scraped ok but failed WP push)
     for (const item of successes) {
       for (const wp of item.wordpress) {
         if (wp.reason === "error" && wp.error) {
           const siteLabel = wp.siteKey === "technerdiness" ? "Tech Nerdiness update" : "Gaming Wize update";
-          issues.push({ group: siteLabel, identifier: item.gameName, reason: wp.error });
+          const reason = wp.error
+            .replace(/\s*Add <!--.*?-->\s*(and\s*<!--.*?-->\s*)?to the article content\.?/gi, "")
+            .trim();
+          issues.push({ group: siteLabel, identifier: item.gameName, reason });
         }
       }
     }

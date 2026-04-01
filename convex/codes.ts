@@ -63,6 +63,8 @@ export const syncCodesForArticle = internalMutation({
         const patch: any = { lastSeenAt: now };
         if (existing.status !== "active") {
           patch.status = "active";
+          // Reset postedOnX so re-activated codes get posted again
+          patch.postedOnX = false;
         }
         if (incoming.isNew && !existing.isNew) {
           patch.isNew = true;
@@ -85,6 +87,7 @@ export const syncCodesForArticle = internalMutation({
           isNew: incoming.isNew,
           firstSeenAt: now,
           lastSeenAt: now,
+          postedOnX: false,
         });
         inserted++;
       }

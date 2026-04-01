@@ -107,7 +107,8 @@ interface NytWordleApiResponse {
 }
 
 interface NytConnectionsApiCard {
-  content: string;
+  content?: string;
+  image_alt_text?: string;
   position?: number;
 }
 
@@ -729,7 +730,7 @@ async function revealConnectionsAnswer(
       color: CONNECTIONS_COLORS[index] ?? "purple",
       title: category.title.trim(),
       cards: category.cards.map((card) => ({
-        content: card.content.trim(),
+        content: (card.content ?? card.image_alt_text ?? "").trim(),
         position:
           typeof card.position === "number" && Number.isInteger(card.position) ? card.position : null,
       })),
