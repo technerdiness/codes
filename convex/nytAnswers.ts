@@ -105,3 +105,115 @@ export const upsertStrandsAnswer = internalMutation({
     }
   },
 });
+
+export const upsertSpellingBeeAnswer = internalMutation({
+  args: {
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    puzzleId: v.number(),
+    centerLetter: v.string(),
+    outerLetters: v.array(v.string()),
+    validLetters: v.array(v.string()),
+    pangrams: v.array(v.string()),
+    pangramCount: v.number(),
+    answers: v.array(v.string()),
+    answerCount: v.number(),
+    editor: v.optional(v.string()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("spellingBeeAnswers")
+      .withIndex("by_answer_date", (q) => q.eq("answerDate", args.answerDate))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+    } else {
+      await ctx.db.insert("spellingBeeAnswers", args);
+    }
+  },
+});
+
+export const upsertLetterBoxedAnswer = internalMutation({
+  args: {
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    puzzleId: v.number(),
+    sides: v.array(v.string()),
+    solution: v.array(v.string()),
+    solutionCount: v.number(),
+    par: v.optional(v.number()),
+    editor: v.optional(v.string()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("letterBoxedAnswers")
+      .withIndex("by_answer_date", (q) => q.eq("answerDate", args.answerDate))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+    } else {
+      await ctx.db.insert("letterBoxedAnswers", args);
+    }
+  },
+});
+
+export const upsertSudokuAnswer = internalMutation({
+  args: {
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    easyPuzzleId: v.number(),
+    mediumPuzzleId: v.number(),
+    hardPuzzleId: v.number(),
+    easy: v.any(),
+    medium: v.any(),
+    hard: v.any(),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("sudokuAnswers")
+      .withIndex("by_answer_date", (q) => q.eq("answerDate", args.answerDate))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+    } else {
+      await ctx.db.insert("sudokuAnswers", args);
+    }
+  },
+});
+
+export const upsertPipsAnswer = internalMutation({
+  args: {
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    editor: v.optional(v.string()),
+    easyPuzzleId: v.number(),
+    mediumPuzzleId: v.number(),
+    hardPuzzleId: v.number(),
+    easy: v.any(),
+    medium: v.any(),
+    hard: v.any(),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("pipsAnswers")
+      .withIndex("by_answer_date", (q) => q.eq("answerDate", args.answerDate))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+    } else {
+      await ctx.db.insert("pipsAnswers", args);
+    }
+  },
+});

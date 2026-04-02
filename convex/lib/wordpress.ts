@@ -610,6 +610,47 @@ export async function updateWordPressLetrosoAnswerSection(input: {
   };
 }
 
+const MONTH_YEAR_PATTERN =
+  /\((January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\)/;
+
+export async function updateWordPressPostTitleMonthYear(input: {
+  siteKey: WordPressSiteKey;
+  articleUrl: string;
+  wordpressPostId: number;
+  wordpressPostType?: string | null;
+  newMonthYear: string;
+}): Promise<"updated" | "no_match" | "no_change"> {
+  const { endpoint, titleRaw } = await fetchWordPressPostContent(
+    input.articleUrl,
+    input.wordpressPostId,
+    input.wordpressPostType,
+    input.siteKey
+  );
+
+  if (!MONTH_YEAR_PATTERN.test(titleRaw)) return "no_match";
+
+  const updatedTitle = titleRaw.replace(MONTH_YEAR_PATTERN, `(${input.newMonthYear})`);
+  if (updatedTitle === titleRaw) return "no_change";
+
+  const siteOrigin = new URL(input.articleUrl).origin;
+  const requestUrl = new URL(
+    `/wp-json/wp/v2/${endpoint}/${input.wordpressPostId}`,
+    siteOrigin
+  );
+  await requestWordPress<Record<string, unknown>>(
+    requestUrl,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: updatedTitle }),
+    },
+    true,
+    input.siteKey
+  );
+
+  return "updated";
+}
+
 export function normalizeWordPressPostId(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === "") {
     return null;

@@ -1,10 +1,18 @@
 "use node";
 
 import { v } from "convex/values";
-import { internalAction, action } from "./_generated/server";
+import { internalAction, action, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-type PuzzleName = "wordle" | "connections" | "strands";
+type PuzzleName =
+  | "wordle"
+  | "connections"
+  | "strands"
+  | "spelling-bee"
+  | "letter-boxed"
+  | "sudoku"
+  | "pips";
+type DailyDifficultyName = "easy" | "medium" | "hard";
 type WordPressEndpointType = "posts" | "pages";
 type WordPressPostType = "post" | "page";
 type ConnectionsCategoryColor = "yellow" | "green" | "blue" | "purple";
@@ -98,6 +106,85 @@ interface StrandsAnswerResult {
   extractedFrom: "nyt:strands-endpoint";
 }
 
+interface SpellingBeeAnswerResult {
+  sourceUrl: string;
+  fetchedAt: string;
+  answerDate: string;
+  answerDateSource: "page:print-date";
+  puzzleId: number;
+  centerLetter: string;
+  outerLetters: string[];
+  validLetters: string[];
+  pangrams: string[];
+  answers: string[];
+  editor: string | null;
+  extractedFrom: "nyt:spelling-bee-window-gameData";
+}
+
+interface LetterBoxedAnswerResult {
+  sourceUrl: string;
+  fetchedAt: string;
+  answerDate: string;
+  answerDateSource: "page:print-date";
+  puzzleId: number;
+  sides: string[];
+  solution: string[];
+  par: number | null;
+  editor: string | null;
+  extractedFrom: "nyt:letter-boxed-window-gameData";
+}
+
+interface SudokuDifficultyResult {
+  difficulty: DailyDifficultyName;
+  dayOfWeek: string | null;
+  answerDate: string;
+  publishedAt: string | null;
+  puzzleId: number;
+  version: number;
+  hints: number[];
+  puzzle: number[];
+  solution: number[];
+}
+
+interface SudokuAnswerResult {
+  sourceUrl: string;
+  fetchedAt: string;
+  answerDate: string;
+  answerDateSource: "page:print-date";
+  easy: SudokuDifficultyResult;
+  medium: SudokuDifficultyResult;
+  hard: SudokuDifficultyResult;
+  extractedFrom: "nyt:sudoku-window-gameData";
+}
+
+interface PipsRegion {
+  indices: number[][];
+  type: string;
+  target?: number;
+}
+
+interface PipsDifficultyResult {
+  difficulty: DailyDifficultyName;
+  puzzleId: number;
+  backendId: string;
+  constructors: string | null;
+  dominoes: number[][];
+  regions: PipsRegion[];
+  solution: number[][][];
+}
+
+interface PipsAnswerResult {
+  sourceUrl: string;
+  fetchedAt: string;
+  answerDate: string;
+  answerDateSource: "api:print-date" | "fetched-at";
+  editor: string | null;
+  easy: PipsDifficultyResult;
+  medium: PipsDifficultyResult;
+  hard: PipsDifficultyResult;
+  extractedFrom: "nyt:pips-endpoint";
+}
+
 interface NytWordleApiResponse {
   id: number;
   solution: string;
@@ -137,6 +224,71 @@ interface NytStrandsApiResponse {
   spangramCoords?: number[][];
 }
 
+interface NytSpellingBeePuzzleData {
+  printDate: string;
+  centerLetter: string;
+  outerLetters: string[];
+  validLetters?: string[];
+  pangrams: string[];
+  answers: string[];
+  id: number;
+  editor?: string;
+}
+
+interface NytSpellingBeePageData {
+  today?: NytSpellingBeePuzzleData;
+  yesterday?: NytSpellingBeePuzzleData;
+  pastPuzzles?: NytSpellingBeePuzzleData[];
+}
+
+interface NytLetterBoxedPageData {
+  id: number;
+  ourSolution: string[];
+  printDate: string;
+  sides: string[];
+  par?: number;
+  editor?: string;
+}
+
+interface NytSudokuPuzzleData {
+  hints?: number[];
+  puzzle: number[];
+  solution: number[];
+}
+
+interface NytSudokuDifficultyData {
+  day_of_week?: string;
+  difficulty?: string;
+  print_date: string;
+  published?: string;
+  puzzle_id: number;
+  version: number;
+  puzzle_data: NytSudokuPuzzleData;
+}
+
+interface NytSudokuPageData {
+  easy: NytSudokuDifficultyData;
+  medium: NytSudokuDifficultyData;
+  hard: NytSudokuDifficultyData;
+}
+
+interface NytPipsDifficultyData {
+  id: number;
+  backendId: string;
+  constructors?: string;
+  dominoes: number[][];
+  regions: PipsRegion[];
+  solution: number[][][];
+}
+
+interface NytPipsApiResponse {
+  printDate: string;
+  editor?: string;
+  easy: NytPipsDifficultyData;
+  medium: NytPipsDifficultyData;
+  hard: NytPipsDifficultyData;
+}
+
 const DEFAULT_WORDLE_ARTICLE_URL =
   "https://www.technerdiness.com/puzzle/todays-wordle-hints-answers/";
 const DEFAULT_GW_WORDLE_ARTICLE_URL =
@@ -165,10 +317,24 @@ const DEFAULT_STRANDS_CURRENT_DATE_MARKER_START = "<!-- TN_STRANDS_CURRENT_DATE_
 const DEFAULT_STRANDS_CURRENT_DATE_MARKER_END = "<!-- TN_STRANDS_CURRENT_DATE_END -->";
 const DEFAULT_STRANDS_CLUE_MARKER_START = "<!-- TN_STRANDS_CLUE_START -->";
 const DEFAULT_STRANDS_CLUE_MARKER_END = "<!-- TN_STRANDS_CLUE_END -->";
+const SPELLING_BEE_SOURCE_URL = "https://www.nytimes.com/puzzles/spelling-bee";
+const LETTER_BOXED_SOURCE_URL = "https://www.nytimes.com/puzzles/letter-boxed";
+const SUDOKU_SOURCE_URL = "https://www.nytimes.com/puzzles/sudoku/easy";
+const PIPS_SOURCE_URL = "https://www.nytimes.com/svc/pips/v1";
 const WORDLE_SOURCE_URL = "https://www.nytimes.com/svc/wordle/v2";
 const CONNECTIONS_SOURCE_URL = "https://www.nytimes.com/svc/connections/v2";
 const STRANDS_SOURCE_URL = "https://www.nytimes.com/svc/strands/v2";
+const NYT_BOT_USER_AGENT = "Mozilla/5.0 (compatible; TechNerdinessBot/1.0)";
 const CONNECTIONS_COLORS = ["yellow", "green", "blue", "purple"] as const;
+const ALL_NYT_PUZZLES = [
+  "wordle",
+  "connections",
+  "strands",
+  "spelling-bee",
+  "letter-boxed",
+  "sudoku",
+  "pips",
+] as const satisfies readonly PuzzleName[];
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -183,7 +349,7 @@ function getEnvValue(name: string, fallback?: string): string {
 }
 
 function isPuzzleName(value: unknown): value is PuzzleName {
-  return value === "wordle" || value === "connections" || value === "strands";
+  return ALL_NYT_PUZZLES.includes(value as PuzzleName);
 }
 
 function getWordPressAuthHeader(envPrefix?: string): string {
@@ -315,6 +481,22 @@ function getConnectionsTimezone(override?: string): string {
 
 function getStrandsTimezone(override?: string): string {
   return override || getEnvValue("STRANDS_TIMEZONE") || getEnvValue("WORDPRESS_UPDATE_TIMEZONE") || "UTC";
+}
+
+function getSpellingBeeTimezone(override?: string): string {
+  return override || getEnvValue("SPELLING_BEE_TIMEZONE") || getEnvValue("WORDPRESS_UPDATE_TIMEZONE") || "UTC";
+}
+
+function getLetterBoxedTimezone(override?: string): string {
+  return override || getEnvValue("LETTER_BOXED_TIMEZONE") || getEnvValue("WORDPRESS_UPDATE_TIMEZONE") || "UTC";
+}
+
+function getSudokuTimezone(override?: string): string {
+  return override || getEnvValue("SUDOKU_TIMEZONE") || getEnvValue("WORDPRESS_UPDATE_TIMEZONE") || "UTC";
+}
+
+function getPipsTimezone(override?: string): string {
+  return override || getEnvValue("PIPS_TIMEZONE") || getEnvValue("WORDPRESS_UPDATE_TIMEZONE") || "UTC";
 }
 
 function formatDateInTimezone(date: Date, timezoneId: string): string {
@@ -654,6 +836,159 @@ function getPreviousIsoDate(answerDate: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+function getRequestedAnswerDate(answerDateOverride: string | undefined, timezoneId: string): string {
+  const answerDate = answerDateOverride || formatDateInTimezone(new Date(), timezoneId);
+  validateAnswerDate(answerDate);
+  return answerDate;
+}
+
+async function fetchNytJson<T>(sourceUrl: string): Promise<T> {
+  const response = await fetch(sourceUrl, {
+    headers: {
+      "user-agent": NYT_BOT_USER_AGENT,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${sourceUrl}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchNytHtml(sourceUrl: string): Promise<string> {
+  const response = await fetch(sourceUrl, {
+    headers: {
+      "user-agent": NYT_BOT_USER_AGENT,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${sourceUrl}: ${response.status}`);
+  }
+
+  return await response.text();
+}
+
+function extractWindowGameData<T>(html: string, sourceUrl: string): T {
+  const marker = "window.gameData = ";
+  const startIndex = html.indexOf(marker);
+  if (startIndex === -1) {
+    throw new Error(`Could not find window.gameData in ${sourceUrl}.`);
+  }
+
+  const scriptEndIndex = html.indexOf("</script>", startIndex);
+  if (scriptEndIndex === -1) {
+    throw new Error(`Could not find the end of the gameData script in ${sourceUrl}.`);
+  }
+
+  const rawJson = html
+    .slice(startIndex + marker.length, scriptEndIndex)
+    .trim()
+    .replace(/;$/, "");
+
+  try {
+    return JSON.parse(rawJson) as T;
+  } catch (error) {
+    throw new Error(
+      `Could not parse window.gameData from ${sourceUrl}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function ensureExactAnswerDate(
+  actualAnswerDate: string | undefined,
+  expectedAnswerDate: string,
+  sourceUrl: string
+): string {
+  const normalizedAnswerDate = actualAnswerDate?.trim();
+  if (!normalizedAnswerDate) {
+    throw new Error(`Response from ${sourceUrl} did not include a print date.`);
+  }
+
+  validateAnswerDate(normalizedAnswerDate);
+  if (normalizedAnswerDate !== expectedAnswerDate) {
+    throw new Error(
+      `Source ${sourceUrl} returned ${normalizedAnswerDate}, but ${expectedAnswerDate} was requested.`
+    );
+  }
+
+  return normalizedAnswerDate;
+}
+
+function normalizeWordList(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => normalizeAnswer(String(value)))
+    .filter((value) => value.length > 0);
+}
+
+function normalizeLetterList(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => value.trim().toUpperCase())
+    .filter((value) => value.length > 0);
+}
+
+function resolveSpellingBeePuzzleForDate(
+  pageData: NytSpellingBeePageData,
+  answerDate: string,
+  sourceUrl: string
+): NytSpellingBeePuzzleData {
+  const candidates = [pageData.today, pageData.yesterday, ...(pageData.pastPuzzles ?? [])].filter(
+    (candidate): candidate is NytSpellingBeePuzzleData => Boolean(candidate)
+  );
+
+  const matchedPuzzle = candidates.find((candidate) => candidate.printDate?.trim() === answerDate);
+  if (!matchedPuzzle) {
+    throw new Error(`Spelling Bee page data from ${sourceUrl} did not include puzzle ${answerDate}.`);
+  }
+
+  return matchedPuzzle;
+}
+
+function normalizeSudokuDifficulty(
+  difficulty: DailyDifficultyName,
+  data: NytSudokuDifficultyData
+): SudokuDifficultyResult {
+  const answerDate = data.print_date?.trim();
+  if (!answerDate) {
+    throw new Error(`Sudoku ${difficulty} payload did not include print_date.`);
+  }
+  validateAnswerDate(answerDate);
+
+  return {
+    difficulty,
+    dayOfWeek: data.day_of_week?.trim() || null,
+    answerDate,
+    publishedAt: data.published?.trim() || null,
+    puzzleId: data.puzzle_id,
+    version: data.version,
+    hints: Array.isArray(data.puzzle_data?.hints) ? [...data.puzzle_data.hints] : [],
+    puzzle: Array.isArray(data.puzzle_data?.puzzle) ? [...data.puzzle_data.puzzle] : [],
+    solution: Array.isArray(data.puzzle_data?.solution) ? [...data.puzzle_data.solution] : [],
+  };
+}
+
+function normalizePipsDifficulty(
+  difficulty: DailyDifficultyName,
+  data: NytPipsDifficultyData
+): PipsDifficultyResult {
+  return {
+    difficulty,
+    puzzleId: data.id,
+    backendId: data.backendId,
+    constructors: data.constructors?.trim() || null,
+    dominoes: Array.isArray(data.dominoes) ? toPlainObject(data.dominoes) : [],
+    regions: Array.isArray(data.regions) ? toPlainObject(data.regions) : [],
+    solution: Array.isArray(data.solution) ? toPlainObject(data.solution) : [],
+  };
+}
+
 async function revealWordleAnswer(
   answerDateOverride: string | undefined,
   timezoneId: string
@@ -802,6 +1137,136 @@ async function revealStrandsAnswer(
   };
 }
 
+async function revealSpellingBeeAnswer(
+  answerDateOverride: string | undefined,
+  timezoneId: string
+): Promise<SpellingBeeAnswerResult> {
+  const fetchedAt = new Date().toISOString();
+  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
+  const sourceUrl = SPELLING_BEE_SOURCE_URL;
+  const html = await fetchNytHtml(sourceUrl);
+  const pageData = extractWindowGameData<NytSpellingBeePageData>(html, sourceUrl);
+  const payload = resolveSpellingBeePuzzleForDate(pageData, answerDate, sourceUrl);
+  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const centerLetter = normalizeLetterList([payload.centerLetter])[0];
+  const outerLetters = normalizeLetterList(payload.outerLetters);
+  const validLetters = normalizeLetterList(payload.validLetters ?? [payload.centerLetter, ...payload.outerLetters]);
+  const pangrams = normalizeWordList(payload.pangrams);
+  const answers = normalizeWordList(payload.answers);
+
+  if (!centerLetter || outerLetters.length === 0 || answers.length === 0) {
+    throw new Error(`Spelling Bee page data from ${sourceUrl} was missing required answer fields.`);
+  }
+
+  return {
+    sourceUrl,
+    fetchedAt,
+    answerDate: normalizedAnswerDate,
+    answerDateSource: "page:print-date",
+    puzzleId: payload.id,
+    centerLetter,
+    outerLetters,
+    validLetters,
+    pangrams,
+    answers,
+    editor: payload.editor?.trim() || null,
+    extractedFrom: "nyt:spelling-bee-window-gameData",
+  };
+}
+
+async function revealLetterBoxedAnswer(
+  answerDateOverride: string | undefined,
+  timezoneId: string
+): Promise<LetterBoxedAnswerResult> {
+  const fetchedAt = new Date().toISOString();
+  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
+  const sourceUrl = LETTER_BOXED_SOURCE_URL;
+  const html = await fetchNytHtml(sourceUrl);
+  const payload = extractWindowGameData<NytLetterBoxedPageData>(html, sourceUrl);
+  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const sides = normalizeLetterList(payload.sides);
+  const solution = normalizeWordList(payload.ourSolution);
+
+  if (sides.length === 0 || solution.length === 0) {
+    throw new Error(`Letter Boxed page data from ${sourceUrl} was missing required answer fields.`);
+  }
+
+  return {
+    sourceUrl,
+    fetchedAt,
+    answerDate: normalizedAnswerDate,
+    answerDateSource: "page:print-date",
+    puzzleId: payload.id,
+    sides,
+    solution,
+    par: typeof payload.par === "number" ? payload.par : null,
+    editor: payload.editor?.trim() || null,
+    extractedFrom: "nyt:letter-boxed-window-gameData",
+  };
+}
+
+async function revealSudokuAnswer(
+  answerDateOverride: string | undefined,
+  timezoneId: string
+): Promise<SudokuAnswerResult> {
+  const fetchedAt = new Date().toISOString();
+  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
+  const sourceUrl = SUDOKU_SOURCE_URL;
+  const html = await fetchNytHtml(sourceUrl);
+  const pageData = extractWindowGameData<NytSudokuPageData>(html, sourceUrl);
+  const easy = normalizeSudokuDifficulty("easy", pageData.easy);
+  const medium = normalizeSudokuDifficulty("medium", pageData.medium);
+  const hard = normalizeSudokuDifficulty("hard", pageData.hard);
+
+  for (const puzzle of [easy, medium, hard]) {
+    if (puzzle.answerDate !== answerDate) {
+      throw new Error(
+        `Sudoku ${puzzle.difficulty} data from ${sourceUrl} returned ${puzzle.answerDate}, but ${answerDate} was requested.`
+      );
+    }
+    if (puzzle.solution.length === 0) {
+      throw new Error(`Sudoku ${puzzle.difficulty} data from ${sourceUrl} did not include a solution.`);
+    }
+  }
+
+  return {
+    sourceUrl,
+    fetchedAt,
+    answerDate,
+    answerDateSource: "page:print-date",
+    easy,
+    medium,
+    hard,
+    extractedFrom: "nyt:sudoku-window-gameData",
+  };
+}
+
+async function revealPipsAnswer(
+  answerDateOverride: string | undefined,
+  timezoneId: string
+): Promise<PipsAnswerResult> {
+  const fetchedAt = new Date().toISOString();
+  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
+  const sourceUrl = `${PIPS_SOURCE_URL}/${answerDate}.json`;
+  const payload = await fetchNytJson<NytPipsApiResponse>(sourceUrl);
+  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const easy = normalizePipsDifficulty("easy", payload.easy);
+  const medium = normalizePipsDifficulty("medium", payload.medium);
+  const hard = normalizePipsDifficulty("hard", payload.hard);
+
+  return {
+    sourceUrl,
+    fetchedAt,
+    answerDate: normalizedAnswerDate,
+    answerDateSource: "api:print-date",
+    editor: payload.editor?.trim() || null,
+    easy,
+    medium,
+    hard,
+    extractedFrom: "nyt:pips-endpoint",
+  };
+}
+
 function toPlainObject<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -916,7 +1381,7 @@ function extractCurrentWordleAnswerSignature(content: string): string | null {
 }
 
 async function syncWordle(
-  ctx: any,
+  ctx: ActionCtx,
   answerDateOverride: string | undefined,
   timezoneId: string,
   dryRun: boolean
@@ -1098,7 +1563,7 @@ function extractCurrentConnectionsAnswerSignature(content: string): string | nul
 }
 
 async function syncConnections(
-  ctx: any,
+  ctx: ActionCtx,
   answerDateOverride: string | undefined,
   timezoneId: string,
   dryRun: boolean
@@ -1307,7 +1772,7 @@ function extractCurrentStrandsAnswerSignature(content: string): string | null {
 }
 
 async function syncStrands(
-  ctx: any,
+  ctx: ActionCtx,
   answerDateOverride: string | undefined,
   timezoneId: string,
   dryRun: boolean
@@ -1421,14 +1886,167 @@ async function syncStrands(
   return summary;
 }
 
+async function syncSpellingBee(
+  ctx: ActionCtx,
+  answerDateOverride: string | undefined,
+  timezoneId: string,
+  dryRun: boolean
+): Promise<Record<string, unknown>> {
+  const result = await revealSpellingBeeAnswer(answerDateOverride, timezoneId);
+  const summary: Record<string, unknown> = {
+    answerDate: result.answerDate,
+    puzzleId: result.puzzleId,
+    centerLetter: result.centerLetter,
+    answerCount: result.answers.length,
+    pangramCount: result.pangrams.length,
+    database: dryRun ? "skipped:dry-run" : "saved",
+    wordpress: "skipped:not-configured",
+    wordpress_gw: "skipped:not-configured",
+  };
+
+  if (!dryRun) {
+    await ctx.runMutation(internal.nytAnswers.upsertSpellingBeeAnswer, {
+      answerDate: result.answerDate,
+      answerDateSource: result.answerDateSource,
+      sourceUrl: result.sourceUrl,
+      puzzleId: result.puzzleId,
+      centerLetter: result.centerLetter,
+      outerLetters: [...result.outerLetters],
+      validLetters: [...result.validLetters],
+      pangrams: [...result.pangrams],
+      pangramCount: result.pangrams.length,
+      answers: [...result.answers],
+      answerCount: result.answers.length,
+      editor: result.editor ?? undefined,
+      fetchedAt: result.fetchedAt,
+      extractedFrom: result.extractedFrom,
+      payload: toPlainObject(result),
+    });
+  }
+
+  return summary;
+}
+
+async function syncLetterBoxed(
+  ctx: ActionCtx,
+  answerDateOverride: string | undefined,
+  timezoneId: string,
+  dryRun: boolean
+): Promise<Record<string, unknown>> {
+  const result = await revealLetterBoxedAnswer(answerDateOverride, timezoneId);
+  const summary: Record<string, unknown> = {
+    answerDate: result.answerDate,
+    puzzleId: result.puzzleId,
+    solution: [...result.solution],
+    par: result.par,
+    database: dryRun ? "skipped:dry-run" : "saved",
+    wordpress: "skipped:not-configured",
+    wordpress_gw: "skipped:not-configured",
+  };
+
+  if (!dryRun) {
+    await ctx.runMutation(internal.nytAnswers.upsertLetterBoxedAnswer, {
+      answerDate: result.answerDate,
+      answerDateSource: result.answerDateSource,
+      sourceUrl: result.sourceUrl,
+      puzzleId: result.puzzleId,
+      sides: [...result.sides],
+      solution: [...result.solution],
+      solutionCount: result.solution.length,
+      par: result.par ?? undefined,
+      editor: result.editor ?? undefined,
+      fetchedAt: result.fetchedAt,
+      extractedFrom: result.extractedFrom,
+      payload: toPlainObject(result),
+    });
+  }
+
+  return summary;
+}
+
+async function syncSudoku(
+  ctx: ActionCtx,
+  answerDateOverride: string | undefined,
+  timezoneId: string,
+  dryRun: boolean
+): Promise<Record<string, unknown>> {
+  const result = await revealSudokuAnswer(answerDateOverride, timezoneId);
+  const summary: Record<string, unknown> = {
+    answerDate: result.answerDate,
+    easyPuzzleId: result.easy.puzzleId,
+    mediumPuzzleId: result.medium.puzzleId,
+    hardPuzzleId: result.hard.puzzleId,
+    database: dryRun ? "skipped:dry-run" : "saved",
+    wordpress: "skipped:not-configured",
+    wordpress_gw: "skipped:not-configured",
+  };
+
+  if (!dryRun) {
+    await ctx.runMutation(internal.nytAnswers.upsertSudokuAnswer, {
+      answerDate: result.answerDate,
+      answerDateSource: result.answerDateSource,
+      sourceUrl: result.sourceUrl,
+      easyPuzzleId: result.easy.puzzleId,
+      mediumPuzzleId: result.medium.puzzleId,
+      hardPuzzleId: result.hard.puzzleId,
+      easy: toPlainObject(result.easy),
+      medium: toPlainObject(result.medium),
+      hard: toPlainObject(result.hard),
+      fetchedAt: result.fetchedAt,
+      extractedFrom: result.extractedFrom,
+      payload: toPlainObject(result),
+    });
+  }
+
+  return summary;
+}
+
+async function syncPips(
+  ctx: ActionCtx,
+  answerDateOverride: string | undefined,
+  timezoneId: string,
+  dryRun: boolean
+): Promise<Record<string, unknown>> {
+  const result = await revealPipsAnswer(answerDateOverride, timezoneId);
+  const summary: Record<string, unknown> = {
+    answerDate: result.answerDate,
+    easyPuzzleId: result.easy.puzzleId,
+    mediumPuzzleId: result.medium.puzzleId,
+    hardPuzzleId: result.hard.puzzleId,
+    database: dryRun ? "skipped:dry-run" : "saved",
+    wordpress: "skipped:not-configured",
+    wordpress_gw: "skipped:not-configured",
+  };
+
+  if (!dryRun) {
+    await ctx.runMutation(internal.nytAnswers.upsertPipsAnswer, {
+      answerDate: result.answerDate,
+      answerDateSource: result.answerDateSource,
+      sourceUrl: result.sourceUrl,
+      editor: result.editor ?? undefined,
+      easyPuzzleId: result.easy.puzzleId,
+      mediumPuzzleId: result.medium.puzzleId,
+      hardPuzzleId: result.hard.puzzleId,
+      easy: toPlainObject(result.easy),
+      medium: toPlainObject(result.medium),
+      hard: toPlainObject(result.hard),
+      fetchedAt: result.fetchedAt,
+      extractedFrom: result.extractedFrom,
+      payload: toPlainObject(result),
+    });
+  }
+
+  return summary;
+}
+
 async function handleSync(
-  ctx: any,
+  ctx: ActionCtx,
   payload: SyncRequestPayload
 ): Promise<SyncSummary> {
   const dryRun = Boolean(payload.dryRun);
   const requestedPuzzles = payload.puzzles?.filter(isPuzzleName).length
     ? payload.puzzles!.filter(isPuzzleName)
-    : (["wordle", "connections", "strands"] as PuzzleName[]);
+    : [...ALL_NYT_PUZZLES];
 
   const summary: SyncSummary = {
     answerDate: payload.answerDate || "",
@@ -1439,12 +2057,7 @@ async function handleSync(
   for (const puzzle of requestedPuzzles) {
     try {
       if (puzzle === "wordle") {
-        const wordleSummary = await syncWordle(
-          ctx,
-          payload.answerDate,
-          getWordleTimezone(payload.timezoneId),
-          dryRun
-        );
+        const wordleSummary = await syncWordle(ctx, payload.answerDate, getWordleTimezone(payload.timezoneId), dryRun);
         summary.puzzles.wordle = wordleSummary;
         summary.answerDate = String(wordleSummary.answerDate || summary.answerDate);
       } else if (puzzle === "connections") {
@@ -1457,14 +2070,35 @@ async function handleSync(
         summary.puzzles.connections = connectionsSummary;
         summary.answerDate = String(connectionsSummary.answerDate || summary.answerDate);
       } else if (puzzle === "strands") {
-        const strandsSummary = await syncStrands(
-          ctx,
-          payload.answerDate,
-          getStrandsTimezone(payload.timezoneId),
-          dryRun
-        );
+        const strandsSummary = await syncStrands(ctx, payload.answerDate, getStrandsTimezone(payload.timezoneId), dryRun);
         summary.puzzles.strands = strandsSummary;
         summary.answerDate = String(strandsSummary.answerDate || summary.answerDate);
+      } else if (puzzle === "spelling-bee") {
+        const spellingBeeSummary = await syncSpellingBee(
+          ctx,
+          payload.answerDate,
+          getSpellingBeeTimezone(payload.timezoneId),
+          dryRun
+        );
+        summary.puzzles["spelling-bee"] = spellingBeeSummary;
+        summary.answerDate = String(spellingBeeSummary.answerDate || summary.answerDate);
+      } else if (puzzle === "letter-boxed") {
+        const letterBoxedSummary = await syncLetterBoxed(
+          ctx,
+          payload.answerDate,
+          getLetterBoxedTimezone(payload.timezoneId),
+          dryRun
+        );
+        summary.puzzles["letter-boxed"] = letterBoxedSummary;
+        summary.answerDate = String(letterBoxedSummary.answerDate || summary.answerDate);
+      } else if (puzzle === "sudoku") {
+        const sudokuSummary = await syncSudoku(ctx, payload.answerDate, getSudokuTimezone(payload.timezoneId), dryRun);
+        summary.puzzles.sudoku = sudokuSummary;
+        summary.answerDate = String(sudokuSummary.answerDate || summary.answerDate);
+      } else if (puzzle === "pips") {
+        const pipsSummary = await syncPips(ctx, payload.answerDate, getPipsTimezone(payload.timezoneId), dryRun);
+        summary.puzzles.pips = pipsSummary;
+        summary.answerDate = String(pipsSummary.answerDate || summary.answerDate);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

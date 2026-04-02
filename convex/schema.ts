@@ -120,6 +120,80 @@ export default defineSchema({
     .index("by_puzzle_id", ["puzzleId"])
     .index("by_fetched_at", ["fetchedAt"]),
 
+  spellingBeeAnswers: defineTable({
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    puzzleId: v.number(),
+    centerLetter: v.string(),
+    outerLetters: v.array(v.string()),
+    validLetters: v.array(v.string()),
+    pangrams: v.array(v.string()),
+    pangramCount: v.number(),
+    answers: v.array(v.string()),
+    answerCount: v.number(),
+    editor: v.optional(v.string()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  letterBoxedAnswers: defineTable({
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    puzzleId: v.number(),
+    sides: v.array(v.string()),
+    solution: v.array(v.string()),
+    solutionCount: v.number(),
+    par: v.optional(v.number()),
+    editor: v.optional(v.string()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  sudokuAnswers: defineTable({
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    easyPuzzleId: v.number(),
+    mediumPuzzleId: v.number(),
+    hardPuzzleId: v.number(),
+    easy: v.any(),
+    medium: v.any(),
+    hard: v.any(),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  pipsAnswers: defineTable({
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    sourceUrl: v.string(),
+    editor: v.optional(v.string()),
+    easyPuzzleId: v.number(),
+    mediumPuzzleId: v.number(),
+    hardPuzzleId: v.number(),
+    easy: v.any(),
+    medium: v.any(),
+    hard: v.any(),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
   gamingNews: defineTable({
     title: v.string(),
     slug: v.string(),

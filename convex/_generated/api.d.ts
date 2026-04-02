@@ -33,6 +33,7 @@ import type * as syncLetroso from "../syncLetroso.js";
 import type * as syncNytPuzzles from "../syncNytPuzzles.js";
 import type * as syncRuns from "../syncRuns.js";
 import type * as twitterCodes from "../twitterCodes.js";
+import type * as updateArticleTitles from "../updateArticleTitles.js";
 import type * as wordpressState from "../wordpressState.js";
 import type * as writeGamingNewsArticle from "../writeGamingNewsArticle.js";
 import type * as writeNormalArticle from "../writeNormalArticle.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   syncNytPuzzles: typeof syncNytPuzzles;
   syncRuns: typeof syncRuns;
   twitterCodes: typeof twitterCodes;
+  updateArticleTitles: typeof updateArticleTitles;
   wordpressState: typeof wordpressState;
   writeGamingNewsArticle: typeof writeGamingNewsArticle;
   writeNormalArticle: typeof writeNormalArticle;

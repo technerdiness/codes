@@ -1272,6 +1272,7 @@ function PuzzlesPage({ notify }) {
       description: "Fetch today's Wordle answer from NYT and update the WordPress article.",
       icon: "W",
       color: "bg-emerald-500/15 text-emerald-400",
+      updatesWordpress: true,
     },
     {
       id: "connections",
@@ -1279,6 +1280,7 @@ function PuzzlesPage({ notify }) {
       description: "Fetch today's Connections categories and update WordPress.",
       icon: "C",
       color: "bg-purple-500/15 text-purple-400",
+      updatesWordpress: true,
     },
     {
       id: "strands",
@@ -1286,6 +1288,39 @@ function PuzzlesPage({ notify }) {
       description: "Fetch today's Strands spangram and theme words, update WordPress.",
       icon: "S",
       color: "bg-blue-500/15 text-blue-400",
+      updatesWordpress: true,
+    },
+    {
+      id: "spelling-bee",
+      title: "Spelling Bee",
+      description: "Fetch today's Spelling Bee answers and pangrams from NYT and save them in Convex.",
+      icon: "B",
+      color: "bg-yellow-500/15 text-yellow-400",
+      updatesWordpress: false,
+    },
+    {
+      id: "letter-boxed",
+      title: "Letter Boxed",
+      description: "Fetch today's Letter Boxed solution and board letters from NYT and save them in Convex.",
+      icon: "LB",
+      color: "bg-rose-500/15 text-rose-400",
+      updatesWordpress: false,
+    },
+    {
+      id: "sudoku",
+      title: "Sudoku",
+      description: "Fetch today's Easy, Medium, and Hard Sudoku solutions from NYT and save them in Convex.",
+      icon: "9",
+      color: "bg-cyan-500/15 text-cyan-400",
+      updatesWordpress: false,
+    },
+    {
+      id: "pips",
+      title: "Pips",
+      description: "Fetch today's Easy, Medium, and Hard Pips solutions from NYT and save them in Convex.",
+      icon: "P",
+      color: "bg-fuchsia-500/15 text-fuchsia-400",
+      updatesWordpress: false,
     },
     {
       id: "letroso",
@@ -1293,6 +1328,7 @@ function PuzzlesPage({ notify }) {
       description: "Scrape today's Letroso answer and update the answer history on WordPress.",
       icon: "L",
       color: "bg-amber-500/15 text-amber-400",
+      updatesWordpress: true,
     },
   ];
 
@@ -1302,7 +1338,7 @@ function PuzzlesPage({ notify }) {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Puzzles</h2>
           <p className="text-muted-foreground">
-            Run individual puzzle syncs or batch all NYT puzzles together.
+            Run individual puzzle syncs or batch all NYT puzzles together. Newer NYT puzzle flows save to Convex only for now.
           </p>
         </div>
         <div className="flex gap-2">
@@ -1341,6 +1377,9 @@ function PuzzlesPage({ notify }) {
           const runArgs = isNyt ? { puzzles: [p.id] } : {};
           const dryKey = `${p.id}-dry`;
           const runKey = `${p.id}-run`;
+          const runConfirm = p.updatesWordpress
+            ? `Sync ${p.title}? This will update WordPress.`
+            : `Sync ${p.title}? This will fetch and save the latest NYT data in Convex.`;
 
           return (
             <Card key={p.id}>
@@ -1375,7 +1414,7 @@ function PuzzlesPage({ notify }) {
                     variant="success"
                     size="sm"
                     onClick={() => {
-                      if (window.confirm(`Sync ${p.title}? This will update WordPress.`))
+                      if (window.confirm(runConfirm))
                         runPuzzle(runKey, `Sync: ${p.title}`, action, runArgs);
                     }}
                     disabled={busy[runKey]}
@@ -1696,4 +1735,3 @@ function PostOnlinePage({ notify }) {
     </>
   );
 }
-

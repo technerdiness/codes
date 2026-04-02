@@ -41,7 +41,7 @@ All backend logic runs as Convex functions:
 
 - **syncCodes**: scrapes Beebom for game codes, saves to DB, updates WordPress
 - **syncLetroso**: scrapes Letroso answer, saves to DB, updates WordPress
-- **syncNytPuzzles**: fetches Wordle/Connections/Strands from NYT, saves answers, updates WordPress
+- **syncNytPuzzles**: fetches Wordle/Connections/Strands/Spelling Bee/Letter Boxed/Sudoku/Pips from NYT, saves answers, and updates WordPress where configured
 - **resolveWordpressPostId**: looks up WordPress post IDs by article URL
 
 ## Cron schedules

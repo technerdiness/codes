@@ -1,6 +1,60 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 
+export const listArticlesForTitleUpdate = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const articles = await ctx.db.query("articles").collect();
+    const result = [];
+
+    for (const article of articles) {
+      if (!article.technerdinessArticleUrl && !article.gamingwizeArticleUrl) continue;
+
+      const tnState = article.technerdinessArticleUrl
+        ? await ctx.db
+            .query("technerdinessWordpressState")
+            .withIndex("by_article_id", (q) => q.eq("articleId", article._id))
+            .first()
+        : null;
+
+      const gwState = article.gamingwizeArticleUrl
+        ? await ctx.db
+            .query("gamingwizeWordpressState")
+            .withIndex("by_article_id", (q) => q.eq("articleId", article._id))
+            .first()
+        : null;
+
+      const technerdiness =
+        article.technerdinessArticleUrl && tnState?.wordpressPostId
+          ? {
+              articleUrl: article.technerdinessArticleUrl,
+              wordpressPostId: tnState.wordpressPostId,
+              wordpressPostType: tnState.wordpressPostType ?? null,
+            }
+          : null;
+
+      const gamingwize =
+        article.gamingwizeArticleUrl && gwState?.wordpressPostId
+          ? {
+              articleUrl: article.gamingwizeArticleUrl,
+              wordpressPostId: gwState.wordpressPostId,
+              wordpressPostType: gwState.wordpressPostType ?? null,
+            }
+          : null;
+
+      if (!technerdiness && !gamingwize) continue;
+
+      result.push({
+        gameName: article.gameName,
+        technerdiness,
+        gamingwize,
+      });
+    }
+
+    return result;
+  },
+});
+
 export const getArticle = internalQuery({
   args: { id: v.id("articles") },
   handler: async (ctx, args) => {

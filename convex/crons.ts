@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Sync NYT puzzles daily at 00:30 UTC
+// Sync all configured NYT puzzles daily at 00:30 UTC
 crons.cron(
   "sync-nyt-puzzles-daily",
   "30 0 * * *",
@@ -72,6 +72,14 @@ crons.cron(
   "post-codes-to-x-every-2-hours",
   "0 */2 * * *",
   internal.postCodesToX.run,
+  {},
+);
+
+// Update article titles (month + year in brackets) on the 1st of every month at 1 AM UTC
+crons.cron(
+  "update-article-titles-monthly",
+  "0 1 1 * *",
+  internal.updateArticleTitles.run,
   {},
 );
 
