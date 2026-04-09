@@ -3,10 +3,10 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Sync all configured NYT puzzles daily at 00:30 UTC
+// Sync all configured NYT puzzles every 6 hours so later-publishing page-based puzzles are picked up the same day.
 crons.cron(
-  "sync-nyt-puzzles-daily",
-  "30 0 * * *",
+  "sync-nyt-puzzles-every-6-hours",
+  "45 */6 * * *",
   internal.syncNytPuzzles.run,
   {},
 );

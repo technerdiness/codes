@@ -238,7 +238,7 @@ interface NytSpellingBeePuzzleData {
 interface NytSpellingBeePageData {
   today?: NytSpellingBeePuzzleData;
   yesterday?: NytSpellingBeePuzzleData;
-  pastPuzzles?: NytSpellingBeePuzzleData[];
+  pastPuzzles?: Record<string, NytSpellingBeePuzzleData | NytSpellingBeePuzzleData[]>;
 }
 
 interface NytLetterBoxedPageData {
@@ -309,6 +309,54 @@ const DEFAULT_STRANDS_ARTICLE_URL =
   "https://www.technerdiness.com/puzzle/todays-nyt-strands-hints-answers/";
 const DEFAULT_GW_STRANDS_ARTICLE_URL =
   "https://www.gamingwize.com/puzzles/today-nyt-strands-hints-answers/";
+const DEFAULT_GW_SPELLING_BEE_ARTICLE_URL =
+  "https://www.gamingwize.com/puzzles/today-nyt-spelling-bee-answers/";
+const DEFAULT_GW_LETTER_BOXED_ARTICLE_URL =
+  "https://www.gamingwize.com/puzzles/today-nyt-letter-boxed-answers/";
+const DEFAULT_GW_SUDOKU_ARTICLE_URL =
+  "https://www.gamingwize.com/puzzles/today-nyt-sudoku-answers/";
+const DEFAULT_GW_PIPS_ARTICLE_URL =
+  "https://www.gamingwize.com/puzzles/today-nyt-pips-answers/";
+const SPELLING_BEE_MARKERS = {
+  currentDateStart: "<!-- TN_SPELLING_BEE_CURRENT_DATE_START -->",
+  currentDateEnd: "<!-- TN_SPELLING_BEE_CURRENT_DATE_END -->",
+  centerLetterStart: "<!-- TN_SPELLING_BEE_CENTER_LETTER_START -->",
+  centerLetterEnd: "<!-- TN_SPELLING_BEE_CENTER_LETTER_END -->",
+  outerLettersStart: "<!-- TN_SPELLING_BEE_OUTER_LETTERS_START -->",
+  outerLettersEnd: "<!-- TN_SPELLING_BEE_OUTER_LETTERS_END -->",
+  pangramsStart: "<!-- TN_SPELLING_BEE_PANGRAMS_START -->",
+  pangramsEnd: "<!-- TN_SPELLING_BEE_PANGRAMS_END -->",
+  answersStart: "<!-- TN_SPELLING_BEE_ANSWERS_START -->",
+  answersEnd: "<!-- TN_SPELLING_BEE_ANSWERS_END -->",
+} as const;
+const LETTER_BOXED_MARKERS = {
+  currentDateStart: "<!-- TN_LETTER_BOXED_CURRENT_DATE_START -->",
+  currentDateEnd: "<!-- TN_LETTER_BOXED_CURRENT_DATE_END -->",
+  sidesStart: "<!-- TN_LETTER_BOXED_SIDES_START -->",
+  sidesEnd: "<!-- TN_LETTER_BOXED_SIDES_END -->",
+  answerStart: "<!-- TN_LETTER_BOXED_ANSWER_START -->",
+  answerEnd: "<!-- TN_LETTER_BOXED_ANSWER_END -->",
+} as const;
+const SUDOKU_MARKERS = {
+  currentDateStart: "<!-- TN_SUDOKU_CURRENT_DATE_START -->",
+  currentDateEnd: "<!-- TN_SUDOKU_CURRENT_DATE_END -->",
+  easyStart: "<!-- TN_SUDOKU_EASY_START -->",
+  easyEnd: "<!-- TN_SUDOKU_EASY_END -->",
+  mediumStart: "<!-- TN_SUDOKU_MEDIUM_START -->",
+  mediumEnd: "<!-- TN_SUDOKU_MEDIUM_END -->",
+  hardStart: "<!-- TN_SUDOKU_HARD_START -->",
+  hardEnd: "<!-- TN_SUDOKU_HARD_END -->",
+} as const;
+const PIPS_MARKERS = {
+  currentDateStart: "<!-- TN_PIPS_CURRENT_DATE_START -->",
+  currentDateEnd: "<!-- TN_PIPS_CURRENT_DATE_END -->",
+  easyStart: "<!-- TN_PIPS_EASY_START -->",
+  easyEnd: "<!-- TN_PIPS_EASY_END -->",
+  mediumStart: "<!-- TN_PIPS_MEDIUM_START -->",
+  mediumEnd: "<!-- TN_PIPS_MEDIUM_END -->",
+  hardStart: "<!-- TN_PIPS_HARD_START -->",
+  hardEnd: "<!-- TN_PIPS_HARD_END -->",
+} as const;
 const DEFAULT_STRANDS_SPANGRAM_MARKER_START = "<!-- TN_STRANDS_SPANGRAM_START -->";
 const DEFAULT_STRANDS_SPANGRAM_MARKER_END = "<!-- TN_STRANDS_SPANGRAM_END -->";
 const DEFAULT_STRANDS_THEME_WORDS_MARKER_START = "<!-- TN_STRANDS_THEME_WORDS_START -->";
@@ -419,6 +467,28 @@ function getStrandsArticleUrl(): string {
 
 function getGwStrandsArticleUrl(): string {
   return getEnvValue("GW_WORDPRESS_STRANDS_ARTICLE_URL", DEFAULT_GW_STRANDS_ARTICLE_URL);
+}
+
+function getGwSpellingBeeArticleUrl(): string {
+  return getEnvValue(
+    "GW_WORDPRESS_SPELLING_BEE_ARTICLE_URL",
+    DEFAULT_GW_SPELLING_BEE_ARTICLE_URL
+  );
+}
+
+function getGwLetterBoxedArticleUrl(): string {
+  return getEnvValue(
+    "GW_WORDPRESS_LETTER_BOXED_ARTICLE_URL",
+    DEFAULT_GW_LETTER_BOXED_ARTICLE_URL
+  );
+}
+
+function getGwSudokuArticleUrl(): string {
+  return getEnvValue("GW_WORDPRESS_SUDOKU_ARTICLE_URL", DEFAULT_GW_SUDOKU_ARTICLE_URL);
+}
+
+function getGwPipsArticleUrl(): string {
+  return getEnvValue("GW_WORDPRESS_PIPS_ARTICLE_URL", DEFAULT_GW_PIPS_ARTICLE_URL);
 }
 
 function getStrandsSpangramMarkerStart(): string {
@@ -855,6 +925,22 @@ async function fetchNytJson<T>(sourceUrl: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function fetchNytJsonIfExists<T>(sourceUrl: string): Promise<T | null> {
+  const response = await fetch(sourceUrl, {
+    headers: {
+      "user-agent": NYT_BOT_USER_AGENT,
+    },
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${sourceUrl}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 async function fetchNytHtml(sourceUrl: string): Promise<string> {
   const response = await fetch(sourceUrl, {
     headers: {
@@ -894,17 +980,22 @@ function extractWindowGameData<T>(html: string, sourceUrl: string): T {
   }
 }
 
-function ensureExactAnswerDate(
-  actualAnswerDate: string | undefined,
-  expectedAnswerDate: string,
-  sourceUrl: string
-): string {
+function ensureAnswerDatePresent(actualAnswerDate: string | undefined, sourceUrl: string): string {
   const normalizedAnswerDate = actualAnswerDate?.trim();
   if (!normalizedAnswerDate) {
     throw new Error(`Response from ${sourceUrl} did not include a print date.`);
   }
 
   validateAnswerDate(normalizedAnswerDate);
+  return normalizedAnswerDate;
+}
+
+function ensureExactAnswerDate(
+  actualAnswerDate: string | undefined,
+  expectedAnswerDate: string,
+  sourceUrl: string
+): string {
+  const normalizedAnswerDate = ensureAnswerDatePresent(actualAnswerDate, sourceUrl);
   if (normalizedAnswerDate !== expectedAnswerDate) {
     throw new Error(
       `Source ${sourceUrl} returned ${normalizedAnswerDate}, but ${expectedAnswerDate} was requested.`
@@ -912,6 +1003,20 @@ function ensureExactAnswerDate(
   }
 
   return normalizedAnswerDate;
+}
+
+function renderWordPressHtmlMarkerSection(innerHtml: string): string {
+  return [
+    "</p>",
+    "<!-- /wp:paragraph -->",
+    "",
+    "<!-- wp:html -->",
+    innerHtml,
+    "<!-- /wp:html -->",
+    "",
+    "<!-- wp:paragraph -->",
+    "<p>",
+  ].join("\n");
 }
 
 function normalizeWordList(values: string[] | undefined): string[] {
@@ -934,14 +1039,32 @@ function normalizeLetterList(values: string[] | undefined): string[] {
     .filter((value) => value.length > 0);
 }
 
+function collectSpellingBeeCandidates(pageData: NytSpellingBeePageData): NytSpellingBeePuzzleData[] {
+  const candidates: NytSpellingBeePuzzleData[] = [];
+
+  if (pageData.today) candidates.push(pageData.today);
+  if (pageData.yesterday) candidates.push(pageData.yesterday);
+
+  const pastPuzzles = pageData.pastPuzzles;
+  if (pastPuzzles && typeof pastPuzzles === "object") {
+    for (const value of Object.values(pastPuzzles)) {
+      if (Array.isArray(value)) {
+        candidates.push(...value);
+      } else if (value) {
+        candidates.push(value);
+      }
+    }
+  }
+
+  return candidates;
+}
+
 function resolveSpellingBeePuzzleForDate(
   pageData: NytSpellingBeePageData,
   answerDate: string,
   sourceUrl: string
 ): NytSpellingBeePuzzleData {
-  const candidates = [pageData.today, pageData.yesterday, ...(pageData.pastPuzzles ?? [])].filter(
-    (candidate): candidate is NytSpellingBeePuzzleData => Boolean(candidate)
-  );
+  const candidates = collectSpellingBeeCandidates(pageData);
 
   const matchedPuzzle = candidates.find((candidate) => candidate.printDate?.trim() === answerDate);
   if (!matchedPuzzle) {
@@ -949,6 +1072,22 @@ function resolveSpellingBeePuzzleForDate(
   }
 
   return matchedPuzzle;
+}
+
+function resolveCurrentSpellingBeePuzzle(
+  pageData: NytSpellingBeePageData,
+  sourceUrl: string
+): NytSpellingBeePuzzleData {
+  if (pageData.today) {
+    return pageData.today;
+  }
+
+  const candidates = collectSpellingBeeCandidates(pageData);
+  if (!candidates.length) {
+    throw new Error(`Spelling Bee page data from ${sourceUrl} did not include any puzzles.`);
+  }
+
+  return [...candidates].sort((a, b) => b.printDate.localeCompare(a.printDate))[0];
 }
 
 function normalizeSudokuDifficulty(
@@ -1142,12 +1281,19 @@ async function revealSpellingBeeAnswer(
   timezoneId: string
 ): Promise<SpellingBeeAnswerResult> {
   const fetchedAt = new Date().toISOString();
-  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
   const sourceUrl = SPELLING_BEE_SOURCE_URL;
   const html = await fetchNytHtml(sourceUrl);
   const pageData = extractWindowGameData<NytSpellingBeePageData>(html, sourceUrl);
-  const payload = resolveSpellingBeePuzzleForDate(pageData, answerDate, sourceUrl);
-  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const payload = answerDateOverride
+    ? resolveSpellingBeePuzzleForDate(
+        pageData,
+        getRequestedAnswerDate(answerDateOverride, timezoneId),
+        sourceUrl
+      )
+    : resolveCurrentSpellingBeePuzzle(pageData, sourceUrl);
+  const normalizedAnswerDate = answerDateOverride
+    ? ensureExactAnswerDate(payload.printDate, getRequestedAnswerDate(answerDateOverride, timezoneId), sourceUrl)
+    : ensureAnswerDatePresent(payload.printDate, sourceUrl);
   const centerLetter = normalizeLetterList([payload.centerLetter])[0];
   const outerLetters = normalizeLetterList(payload.outerLetters);
   const validLetters = normalizeLetterList(payload.validLetters ?? [payload.centerLetter, ...payload.outerLetters]);
@@ -1179,11 +1325,12 @@ async function revealLetterBoxedAnswer(
   timezoneId: string
 ): Promise<LetterBoxedAnswerResult> {
   const fetchedAt = new Date().toISOString();
-  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
   const sourceUrl = LETTER_BOXED_SOURCE_URL;
   const html = await fetchNytHtml(sourceUrl);
   const payload = extractWindowGameData<NytLetterBoxedPageData>(html, sourceUrl);
-  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const normalizedAnswerDate = answerDateOverride
+    ? ensureExactAnswerDate(payload.printDate, getRequestedAnswerDate(answerDateOverride, timezoneId), sourceUrl)
+    : ensureAnswerDatePresent(payload.printDate, sourceUrl);
   const sides = normalizeLetterList(payload.sides);
   const solution = normalizeWordList(payload.ourSolution);
 
@@ -1210,7 +1357,6 @@ async function revealSudokuAnswer(
   timezoneId: string
 ): Promise<SudokuAnswerResult> {
   const fetchedAt = new Date().toISOString();
-  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
   const sourceUrl = SUDOKU_SOURCE_URL;
   const html = await fetchNytHtml(sourceUrl);
   const pageData = extractWindowGameData<NytSudokuPageData>(html, sourceUrl);
@@ -1218,10 +1364,14 @@ async function revealSudokuAnswer(
   const medium = normalizeSudokuDifficulty("medium", pageData.medium);
   const hard = normalizeSudokuDifficulty("hard", pageData.hard);
 
+  const expectedAnswerDate = answerDateOverride
+    ? getRequestedAnswerDate(answerDateOverride, timezoneId)
+    : easy.answerDate;
+
   for (const puzzle of [easy, medium, hard]) {
-    if (puzzle.answerDate !== answerDate) {
+    if (puzzle.answerDate !== expectedAnswerDate) {
       throw new Error(
-        `Sudoku ${puzzle.difficulty} data from ${sourceUrl} returned ${puzzle.answerDate}, but ${answerDate} was requested.`
+        `Sudoku ${puzzle.difficulty} data from ${sourceUrl} returned ${puzzle.answerDate}, but ${expectedAnswerDate} was requested.`
       );
     }
     if (puzzle.solution.length === 0) {
@@ -1232,7 +1382,7 @@ async function revealSudokuAnswer(
   return {
     sourceUrl,
     fetchedAt,
-    answerDate,
+    answerDate: expectedAnswerDate,
     answerDateSource: "page:print-date",
     easy,
     medium,
@@ -1246,10 +1396,31 @@ async function revealPipsAnswer(
   timezoneId: string
 ): Promise<PipsAnswerResult> {
   const fetchedAt = new Date().toISOString();
-  const answerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
-  const sourceUrl = `${PIPS_SOURCE_URL}/${answerDate}.json`;
-  const payload = await fetchNytJson<NytPipsApiResponse>(sourceUrl);
-  const normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, answerDate, sourceUrl);
+  const requestedAnswerDate = getRequestedAnswerDate(answerDateOverride, timezoneId);
+  let sourceUrl = `${PIPS_SOURCE_URL}/${requestedAnswerDate}.json`;
+  let payload: NytPipsApiResponse | null = null;
+  let normalizedAnswerDate = "";
+
+  if (answerDateOverride) {
+    payload = await fetchNytJson<NytPipsApiResponse>(sourceUrl);
+    normalizedAnswerDate = ensureExactAnswerDate(payload.printDate, requestedAnswerDate, sourceUrl);
+  } else {
+    for (const candidateDate of [requestedAnswerDate, getPreviousIsoDate(requestedAnswerDate)]) {
+      const candidateUrl = `${PIPS_SOURCE_URL}/${candidateDate}.json`;
+      const candidatePayload = await fetchNytJsonIfExists<NytPipsApiResponse>(candidateUrl);
+      if (!candidatePayload) {
+        continue;
+      }
+      payload = candidatePayload;
+      sourceUrl = candidateUrl;
+      normalizedAnswerDate = ensureAnswerDatePresent(candidatePayload.printDate, candidateUrl);
+      break;
+    }
+    if (!payload) {
+      throw new Error(`Could not find a current Pips payload at ${sourceUrl} or the previous day.`);
+    }
+  }
+
   const easy = normalizePipsDifficulty("easy", payload.easy);
   const medium = normalizePipsDifficulty("medium", payload.medium);
   const hard = normalizePipsDifficulty("hard", payload.hard);
@@ -1281,6 +1452,22 @@ function renderWordPressConnectionsPostTitle(answerDate: string, puzzleId: numbe
 
 function renderWordPressStrandsPostTitle(answerDate: string): string {
   return `Today's NYT Strands Answer and Hints for ${formatIsoDateMonthDay(answerDate)} (Game #${calculateStrandsGameNumber(answerDate)})`;
+}
+
+function renderWordPressSpellingBeePostTitle(answerDate: string, puzzleId: number): string {
+  return `Today's NYT Spelling Bee Answers and Pangrams for ${formatIsoDateMonthDay(answerDate)} (Puzzle #${puzzleId})`;
+}
+
+function renderWordPressLetterBoxedPostTitle(answerDate: string, puzzleId: number): string {
+  return `Today's NYT Letter Boxed Answer for ${formatIsoDateMonthDay(answerDate)} (Puzzle #${puzzleId})`;
+}
+
+function renderWordPressSudokuPostTitle(answerDate: string): string {
+  return `Today's NYT Sudoku Answers for ${formatIsoDateMonthDay(answerDate)} (Easy, Medium, Hard)`;
+}
+
+function renderWordPressPipsPostTitle(answerDate: string): string {
+  return `Today's NYT Pips Answers for ${formatIsoDateMonthDay(answerDate)} (Easy, Medium, Hard)`;
 }
 
 function renderWordleAnswerRevealSection(
@@ -1676,6 +1863,129 @@ function buildStrandsAnswerSignature(result: StrandsAnswerResult): string {
   return normalizeComparisonValue([result.spangram, ...result.themeWords].join("::")) as string;
 }
 
+type StrandsVisualMode = "spangram" | "solution";
+
+interface StrandsHighlightWord {
+  kind: "spangram" | "theme";
+  word: string;
+  coords: StrandsCoordinate[];
+  fill: string;
+}
+
+function getStrandsCoordinateKey([row, col]: StrandsCoordinate): string {
+  return `${row},${col}`;
+}
+
+function buildStrandsHighlightWords(
+  result: StrandsAnswerResult,
+  mode: StrandsVisualMode
+): StrandsHighlightWord[] {
+  const words: StrandsHighlightWord[] = [];
+
+  if (mode === "solution") {
+    for (const word of result.themeWords) {
+      const coords = result.themeCoords[word] ?? [];
+      if (coords.length) {
+        words.push({
+          kind: "theme",
+          word,
+          coords,
+          fill: "#aedfee",
+        });
+      }
+    }
+  }
+
+  if (result.spangramCoords.length) {
+    words.push({
+      kind: "spangram",
+      word: result.spangram,
+      coords: result.spangramCoords,
+      fill: "#f8cd05",
+    });
+  }
+
+  return mode === "spangram" ? words.filter((word) => word.kind === "spangram") : words;
+}
+
+function renderWordPressStrandsBoardSvg(
+  result: StrandsAnswerResult,
+  mode: StrandsVisualMode
+): string | null {
+  const rows = result.startingBoard.length;
+  const cols = result.startingBoard.reduce((max, row) => Math.max(max, row.length), 0);
+
+  if (!rows || !cols) {
+    return null;
+  }
+
+  const step = 54;
+  const radius = 21;
+  const padding = 28;
+  const svgWidth = padding * 2 + (cols - 1) * step + radius * 2;
+  const svgHeight = padding * 2 + (rows - 1) * step + radius * 2;
+  const words = buildStrandsHighlightWords(result, mode);
+  const highlights = new Map<string, StrandsHighlightWord>();
+
+  for (const word of words) {
+    for (const coord of word.coords) {
+      highlights.set(getStrandsCoordinateKey(coord), word);
+    }
+  }
+
+  const connectors = words
+    .filter((word) => word.coords.length > 1)
+    .map((word) => {
+      const path = word.coords
+        .map(([row, col], index) => {
+          const x = padding + col * step + radius;
+          const y = padding + row * step + radius;
+          return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+        })
+        .join(" ");
+      return `<path d="${path}" fill="none" stroke="${word.fill}" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>`;
+    })
+    .join("");
+
+  const circles = result.startingBoard
+    .flatMap((boardRow, rowIndex) =>
+      boardRow.split("").map((letter, colIndex) => {
+        const x = padding + colIndex * step + radius;
+        const y = padding + rowIndex * step + radius;
+        const highlight = highlights.get(getStrandsCoordinateKey([rowIndex, colIndex]));
+        const fill = highlight?.fill ?? "#ffffff";
+
+        return [
+          `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fill}" stroke="${highlight ? "none" : "#dbd8c5"}" stroke-width="2"/>`,
+          `<text x="${x}" y="${y + 1}" text-anchor="middle" dominant-baseline="middle" font-size="20" font-weight="700" fill="#111111" font-family="Arial, Helvetica, sans-serif">${escapeHtml(
+            letter
+          )}</text>`,
+        ].join("");
+      })
+    )
+    .join("");
+
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" role="img" aria-label="${escapeHtml(
+      mode === "spangram"
+        ? `NYT Strands spangram board for ${result.answerDate}`
+        : `NYT Strands solution board for ${result.answerDate}`
+    )}">`,
+    `<rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" rx="28" fill="#f8f7f2"/>`,
+    connectors,
+    circles,
+    `</svg>`,
+  ].join("");
+}
+
+function renderWordPressStrandsBoardHtml(
+  result: StrandsAnswerResult,
+  mode: StrandsVisualMode
+): string {
+  const svg = renderWordPressStrandsBoardSvg(result, mode);
+  return svg ? `<div class="tn-strands-board">${svg}</div>` : "";
+}
+
 function renderWordPressStrandsRevealHtml(
   summaryLabel: string,
   innerHtml: string,
@@ -1689,6 +1999,9 @@ function renderWordPressStrandsRevealHtml(
     ".tn-strands-answer-reveal[open] summary{display:none;}",
     ".tn-strands-answer-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
     ".tn-strands-answer-reveal__content p:last-child,.tn-strands-answer-reveal__content ul:last-child{margin-bottom:0;}",
+    ".tn-strands-board{margin:1rem 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}",
+    ".tn-strands-board svg{display:block;width:100%;height:auto;min-width:320px;}",
+    ".tn-strands-answer-list li{margin:.35rem 0;}",
     "</style>",
     `<details class="tn-strands-answer-reveal" ${dataAttribute}>`,
     `<summary>${escapeHtml(summaryLabel)}</summary>`,
@@ -1700,7 +2013,11 @@ function renderWordPressStrandsRevealHtml(
 function renderWordPressStrandsSpangramHtml(result: StrandsAnswerResult): string {
   return renderWordPressStrandsRevealHtml(
     "Reveal Spangram",
-    `<p>${escapeHtml(result.spangram)}</p>`,
+    [
+      `<p><strong>Spangram:</strong> ${escapeHtml(result.spangram)}</p>`,
+      `<p>The board below traces the spangram across the same NYT Strands grid, so you can see its exact route instead of guessing the path from the answer alone.</p>`,
+      renderWordPressStrandsBoardHtml(result, "spangram"),
+    ].join("\n"),
     `data-answer="${escapeHtml(result.spangram)}"`
   );
 }
@@ -1709,8 +2026,599 @@ function renderWordPressStrandsThemeWordsHtml(result: StrandsAnswerResult): stri
   const items = result.themeWords.map((word) => `<li>${escapeHtml(word)}</li>`).join("");
   return renderWordPressStrandsRevealHtml(
     "Reveal Theme Words",
-    `<ul class="wp-block-list">${items}</ul>`,
+    [
+      `<p>The solved grid below highlights the theme words in blue and the spangram in yellow, matching the way Strands separates the full answer set.</p>`,
+      renderWordPressStrandsBoardHtml(result, "solution"),
+      `<ul class="wp-block-list tn-strands-answer-list">${items}</ul>`,
+    ].join("\n"),
     `data-answer-signature="${escapeHtml(buildStrandsAnswerSignature(result))}"`
+  );
+}
+
+function buildSpellingBeeAnswerSignature(result: SpellingBeeAnswerResult): string {
+  return normalizeComparisonValue(
+    [
+      String(result.puzzleId),
+      result.answerDate,
+      result.centerLetter,
+      result.outerLetters.join(","),
+      result.answers.join("|"),
+    ].join("::")
+  ) as string;
+}
+
+function renderWordPressSpellingBeePangramsHtml(result: SpellingBeeAnswerResult): string {
+  const items = result.pangrams.map((word) => `<li><strong>${escapeHtml(word)}</strong></li>`).join("\n");
+  return renderWordPressHtmlMarkerSection(
+    [
+      "<style>",
+      ".tn-spelling-bee-reveal{margin:1rem 0;}",
+      ".tn-spelling-bee-reveal summary{display:inline-flex;align-items:center;justify-content:center;padding:.8rem 1.25rem;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:700;cursor:pointer;list-style:none;}",
+      ".tn-spelling-bee-reveal summary::-webkit-details-marker{display:none;}",
+      ".tn-spelling-bee-reveal[open] summary{display:none;}",
+      ".tn-spelling-bee-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
+      ".tn-spelling-bee-reveal__content p:last-child,.tn-spelling-bee-reveal__content ul:last-child,.tn-spelling-bee-reveal__content ol:last-child{margin-bottom:0;}",
+      "</style>",
+      `<details class="tn-spelling-bee-reveal" data-answer-signature="${escapeHtml(
+        `${result.puzzleId}::${result.answerDate}::${result.pangrams.join("::")}`
+      )}">`,
+      "<summary>Reveal Pangrams</summary>",
+      '<div class="tn-spelling-bee-reveal__content">',
+      `<p><strong>Pangrams for ${escapeHtml(formatIsoDateLong(result.answerDate))}</strong></p>`,
+      `<ul class="wp-block-list">\n${items}\n</ul>`,
+      "</div>",
+      "</details>",
+    ].join("\n")
+  );
+}
+
+function renderWordPressSpellingBeeAnswersHtml(result: SpellingBeeAnswerResult): string {
+  const pangrams = new Set(result.pangrams);
+  const items = result.answers
+    .map((word) => (pangrams.has(word) ? `<li><strong>${escapeHtml(word)}</strong></li>` : `<li>${escapeHtml(word)}</li>`))
+    .join("\n");
+
+  return renderWordPressHtmlMarkerSection(
+    [
+      "<style>",
+      ".tn-spelling-bee-answer-list{margin:1rem 0;}",
+      ".tn-spelling-bee-answer-list summary{display:inline-flex;align-items:center;justify-content:center;padding:.8rem 1.25rem;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:700;cursor:pointer;list-style:none;}",
+      ".tn-spelling-bee-answer-list summary::-webkit-details-marker{display:none;}",
+      ".tn-spelling-bee-answer-list[open] summary{display:none;}",
+      ".tn-spelling-bee-answer-list__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
+      ".tn-spelling-bee-answer-list__content p:last-child,.tn-spelling-bee-answer-list__content ul:last-child,.tn-spelling-bee-answer-list__content ol:last-child{margin-bottom:0;}",
+      "</style>",
+      `<details class="tn-spelling-bee-answer-list" data-answer-signature="${escapeHtml(
+        buildSpellingBeeAnswerSignature(result)
+      )}">`,
+      "<summary>Reveal Full Answer List</summary>",
+      '<div class="tn-spelling-bee-answer-list__content">',
+      `<p><strong>Accepted answers for ${escapeHtml(formatIsoDateLong(result.answerDate))}</strong></p>`,
+      `<ul class="wp-block-list">\n${items}\n</ul>`,
+      "</div>",
+      "</details>",
+    ].join("\n")
+  );
+}
+
+function buildLetterBoxedAnswerSignature(result: LetterBoxedAnswerResult): string {
+  return normalizeComparisonValue(
+    [String(result.puzzleId), result.answerDate, ...result.solution].join("::")
+  ) as string;
+}
+
+function renderWordPressLetterBoxedAnswerHtml(result: LetterBoxedAnswerResult): string {
+  const items = result.solution.map((word) => `<li>${escapeHtml(word)}</li>`).join("\n");
+  return renderWordPressHtmlMarkerSection(
+    [
+      "<style>",
+      ".tn-letter-boxed-reveal{margin:1rem 0;}",
+      ".tn-letter-boxed-reveal summary{display:inline-flex;align-items:center;justify-content:center;padding:.8rem 1.25rem;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:700;cursor:pointer;list-style:none;}",
+      ".tn-letter-boxed-reveal summary::-webkit-details-marker{display:none;}",
+      ".tn-letter-boxed-reveal[open] summary{display:none;}",
+      ".tn-letter-boxed-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
+      ".tn-letter-boxed-reveal__content p:last-child,.tn-letter-boxed-reveal__content ul:last-child,.tn-letter-boxed-reveal__content ol:last-child{margin-bottom:0;}",
+      "</style>",
+      `<details class="tn-letter-boxed-reveal" data-answer-signature="${escapeHtml(
+        buildLetterBoxedAnswerSignature(result)
+      )}">`,
+      "<summary>Reveal Answer</summary>",
+      '<div class="tn-letter-boxed-reveal__content">',
+      `<p><strong>Official solution for ${escapeHtml(formatIsoDateLong(result.answerDate))}</strong></p>`,
+      `<ol class="wp-block-list">\n${items}\n</ol>`,
+      "<p>The chain works because the final letter of the first word becomes the opening letter of the second.</p>",
+      "</div>",
+      "</details>",
+    ].join("\n")
+  );
+}
+
+function buildSudokuAnswerSignature(result: SudokuDifficultyResult): string {
+  return `${result.puzzleId}::${result.solution.join("")}`;
+}
+
+function renderWordPressSudokuGrid(solution: number[]): string {
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < 9; rowIndex += 1) {
+    const cells = [];
+    for (let colIndex = 0; colIndex < 9; colIndex += 1) {
+      cells.push(`<td>${escapeHtml(String(solution[rowIndex * 9 + colIndex] ?? ""))}</td>`);
+    }
+    rows.push(`<tr>\n${cells.join("\n")}\n</tr>`);
+  }
+
+  return `<table class="tn-sudoku-grid">\n<tbody>\n${rows.join("\n")}\n</tbody>\n</table>`;
+}
+
+function renderWordPressSudokuDifficultyHtml(result: SudokuDifficultyResult, label: string): string {
+  return renderWordPressHtmlMarkerSection(
+    [
+      "<style>",
+      ".tn-sudoku-answer-reveal{margin:1rem 0;}",
+      ".tn-sudoku-answer-reveal summary{display:inline-flex;align-items:center;justify-content:center;padding:.8rem 1.25rem;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:700;cursor:pointer;list-style:none;}",
+      ".tn-sudoku-answer-reveal summary::-webkit-details-marker{display:none;}",
+      ".tn-sudoku-answer-reveal[open] summary{display:none;}",
+      ".tn-sudoku-answer-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;overflow-x:auto;}",
+      ".tn-sudoku-answer-reveal__content p:last-child,.tn-sudoku-answer-reveal__content ul:last-child,.tn-sudoku-answer-reveal__content ol:last-child{margin-bottom:0;}",
+      ".tn-sudoku-grid{border-collapse:collapse;margin:0 auto;}",
+      ".tn-sudoku-grid td{width:2rem;height:2rem;border:1px solid #cbd5e1;text-align:center;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}",
+      ".tn-sudoku-grid tr:nth-child(3n) td{border-bottom:2px solid #111827;}",
+      ".tn-sudoku-grid tr:first-child td{border-top:2px solid #111827;}",
+      ".tn-sudoku-grid td:nth-child(3n){border-right:2px solid #111827;}",
+      ".tn-sudoku-grid td:first-child{border-left:2px solid #111827;}",
+      "</style>",
+      `<details class="tn-sudoku-answer-reveal" data-answer-signature="${escapeHtml(
+        buildSudokuAnswerSignature(result)
+      )}">`,
+      `<summary>Reveal ${escapeHtml(label)} Solution</summary>`,
+      '<div class="tn-sudoku-answer-reveal__content">',
+      `<p><strong>${escapeHtml(label)} puzzle #${result.puzzleId}</strong></p>`,
+      renderWordPressSudokuGrid(result.solution),
+      "</div>",
+      "</details>",
+    ].join("\n")
+  );
+}
+
+interface PipsRegionPalette {
+  fill: string;
+  stroke: string;
+  badge: string;
+}
+
+interface StyledPipsRegion extends PipsRegion {
+  palette: PipsRegionPalette | null;
+}
+
+interface PipsBoardMetrics {
+  cell: number;
+  gap: number;
+  boardPad: number;
+  radius: number;
+  dashRadius: number;
+}
+
+interface PipsRenderContext {
+  difficulty: PipsDifficultyResult;
+  occupied: Set<string>;
+  styledRegions: StyledPipsRegion[];
+  maxRow: number;
+  maxCol: number;
+  metrics: PipsBoardMetrics;
+  originX: number;
+  originY: number;
+}
+
+const PIPS_REGION_PALETTES: readonly PipsRegionPalette[] = [
+  { fill: "#c7a8c8", stroke: "#7617d6", badge: "#9251ca" },
+  { fill: "#e49baa", stroke: "#c70042", badge: "#db137a" },
+  { fill: "#a8bec4", stroke: "#006c7b", badge: "#008ea4" },
+  { fill: "#ebbf97", stroke: "#b94b00", badge: "#d35a08" },
+  { fill: "#b5b0bf", stroke: "#0c386a", badge: "#124076" },
+  { fill: "#bcb589", stroke: "#486700", badge: "#618200" },
+] as const;
+
+function getPipsCoordKey(row: number, col: number): string {
+  return `${row},${col}`;
+}
+
+function formatPipsCoordLabel([row, col]: number[]): string {
+  return `R${row + 1}C${col + 1}`;
+}
+
+function buildPipsAnswerSignature(difficulty: PipsDifficultyResult): string {
+  return `${difficulty.puzzleId}::${difficulty.dominoes
+    .map((domino, index) => {
+      const [firstCell, secondCell] = difficulty.solution[index];
+      return `${domino[0]}-${domino[1]}:${formatPipsCoordLabel(firstCell)}-${formatPipsCoordLabel(secondCell)}`;
+    })
+    .join("|")}`;
+}
+
+function buildPipsContext(difficulty: PipsDifficultyResult): PipsRenderContext {
+  const occupied = new Set<string>();
+  const rows: number[] = [];
+  const cols: number[] = [];
+
+  difficulty.regions.forEach((region) => {
+    for (const [row, col] of region.indices) {
+      occupied.add(getPipsCoordKey(row, col));
+      rows.push(row);
+      cols.push(col);
+    }
+  });
+
+  difficulty.solution.forEach(([firstCell, secondCell]) => {
+    for (const [row, col] of [firstCell, secondCell]) {
+      occupied.add(getPipsCoordKey(row, col));
+      rows.push(row);
+      cols.push(col);
+    }
+  });
+
+  let paletteIndex = 0;
+  const styledRegions: StyledPipsRegion[] = difficulty.regions.map((region) => {
+    if (region.type === "empty") {
+      return { ...region, palette: null };
+    }
+
+    const palette = PIPS_REGION_PALETTES[paletteIndex % PIPS_REGION_PALETTES.length];
+    paletteIndex += 1;
+    return { ...region, palette };
+  });
+
+  const maxRow = Math.max(...rows);
+  const maxCol = Math.max(...cols);
+  const metrics: PipsBoardMetrics =
+    maxRow >= 7
+      ? { cell: 72, gap: 10, boardPad: 14, radius: 15, dashRadius: 15 }
+      : maxCol >= 4
+        ? { cell: 76, gap: 10, boardPad: 14, radius: 16, dashRadius: 16 }
+        : { cell: 82, gap: 10, boardPad: 14, radius: 17, dashRadius: 17 };
+
+  return {
+    difficulty,
+    occupied,
+    styledRegions,
+    maxRow,
+    maxCol,
+    metrics,
+    originX: 30,
+    originY: 30,
+  };
+}
+
+function getPipsCellTopLeft(row: number, col: number, context: PipsRenderContext): { x: number; y: number } {
+  return {
+    x: context.originX + col * (context.metrics.cell + context.metrics.gap),
+    y: context.originY + row * (context.metrics.cell + context.metrics.gap),
+  };
+}
+
+function renderPipsLine(x1: number, y1: number, x2: number, y2: number, stroke: string): string {
+  return `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="${stroke}" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="10 10"/>`;
+}
+
+function renderPipsArc(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  sweepFlag: 0 | 1,
+  radius: number,
+  stroke: string
+): string {
+  return `<path d="M ${startX} ${startY} A ${radius} ${radius} 0 0 ${sweepFlag} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="10 10"/>`;
+}
+
+function renderPipsRegionOutlines(context: PipsRenderContext): string {
+  const segments: string[] = [];
+
+  for (const region of context.styledRegions) {
+    if (!region.palette) continue;
+    const sameRegion = new Set(region.indices.map(([row, col]) => getPipsCoordKey(row, col)));
+    const stroke = region.palette.stroke;
+
+    for (const [row, col] of region.indices) {
+      const { x, y } = getPipsCellTopLeft(row, col, context);
+      const top = !sameRegion.has(getPipsCoordKey(row - 1, col));
+      const right = !sameRegion.has(getPipsCoordKey(row, col + 1));
+      const bottom = !sameRegion.has(getPipsCoordKey(row + 1, col));
+      const left = !sameRegion.has(getPipsCoordKey(row, col - 1));
+      const r = context.metrics.dashRadius;
+      const size = context.metrics.cell;
+
+      if (top) segments.push(renderPipsLine(x + r, y, x + size - r, y, stroke));
+      if (right) segments.push(renderPipsLine(x + size, y + r, x + size, y + size - r, stroke));
+      if (bottom) segments.push(renderPipsLine(x + r, y + size, x + size - r, y + size, stroke));
+      if (left) segments.push(renderPipsLine(x, y + r, x, y + size - r, stroke));
+
+      if (top && left) segments.push(renderPipsArc(x + r, y, x, y + r, 0, r, stroke));
+      if (top && right) segments.push(renderPipsArc(x + size - r, y, x + size, y + r, 1, r, stroke));
+      if (bottom && right) segments.push(renderPipsArc(x + size, y + size - r, x + size - r, y + size, 1, r, stroke));
+      if (bottom && left) segments.push(renderPipsArc(x + r, y + size, x, y + size - r, 1, r, stroke));
+
+      const rightNeighbor = sameRegion.has(getPipsCoordKey(row, col + 1));
+      const bottomNeighbor = sameRegion.has(getPipsCoordKey(row + 1, col));
+
+      if (rightNeighbor) {
+        const neighborTop = !sameRegion.has(getPipsCoordKey(row - 1, col + 1));
+        const neighborBottom = !sameRegion.has(getPipsCoordKey(row + 1, col + 1));
+        if (top && neighborTop) {
+          segments.push(renderPipsLine(x + size - r, y, x + size + context.metrics.gap + r, y, stroke));
+        }
+        if (bottom && neighborBottom) {
+          segments.push(
+            renderPipsLine(x + size - r, y + size, x + size + context.metrics.gap + r, y + size, stroke)
+          );
+        }
+      }
+
+      if (bottomNeighbor) {
+        const neighborLeft = !sameRegion.has(getPipsCoordKey(row + 1, col - 1));
+        const neighborRight = !sameRegion.has(getPipsCoordKey(row + 1, col + 1));
+        if (left && neighborLeft) {
+          segments.push(renderPipsLine(x, y + size - r, x, y + size + context.metrics.gap + r, stroke));
+        }
+        if (right && neighborRight) {
+          segments.push(
+            renderPipsLine(x + size, y + size - r, x + size, y + size + context.metrics.gap + r, stroke)
+          );
+        }
+      }
+    }
+  }
+
+  return segments.join("");
+}
+
+function getPipsClueLabel(region: PipsRegion): string {
+  if (region.type === "equals") return "=";
+  if (region.type === "unequal") return "&#8800;";
+  if (region.type === "sum") return String(region.target ?? "");
+  if (region.type === "greater") return `&gt;${region.target ?? ""}`;
+  if (region.type === "less") return `&lt;${region.target ?? ""}`;
+  return "";
+}
+
+function getPipsClueAnchor(region: StyledPipsRegion, context: PipsRenderContext): {
+  anchor: number[];
+  placement: "right" | "bottom";
+} {
+  const anchor = [...region.indices].sort((a, b) => (a[0] !== b[0] ? b[0] - a[0] : b[1] - a[1]))[0];
+  const [row, col] = anchor;
+  const belowOpen = !context.occupied.has(getPipsCoordKey(row + 1, col));
+  return { anchor, placement: row === context.maxRow || belowOpen ? "bottom" : "right" };
+}
+
+function renderPipsBadge(label: string, centerX: number, centerY: number, palette: PipsRegionPalette): string {
+  const squareSide = 40;
+  const fontSize = label.length >= 3 ? 18 : label.length === 2 ? 22 : 30;
+  return [
+    "<g>",
+    `<rect x="${centerX - squareSide / 2}" y="${centerY - squareSide / 2}" width="${squareSide}" height="${squareSide}" rx="7" fill="${palette.badge}" transform="rotate(45 ${centerX} ${centerY})"/>`,
+    `<text x="${centerX}" y="${centerY + 0.5}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-weight="800" fill="#ffffff" font-family="Arial, Helvetica, sans-serif">${label}</text>`,
+    "</g>",
+  ].join("");
+}
+
+function renderPipsClueBadges(context: PipsRenderContext): string {
+  const badges: string[] = [];
+
+  for (const region of context.styledRegions) {
+    if (!region.palette || region.type === "empty") continue;
+    const label = getPipsClueLabel(region);
+    const { anchor, placement } = getPipsClueAnchor(region, context);
+    const { x, y } = getPipsCellTopLeft(anchor[0], anchor[1], context);
+    const cornerX = x + context.metrics.cell;
+    const cornerY = y + context.metrics.cell;
+    const centerX = placement === "right" ? cornerX + 18 : cornerX - 18;
+    const centerY = placement === "right" ? cornerY - 18 : cornerY + 18;
+    badges.push(renderPipsBadge(label, centerX, centerY, region.palette));
+  }
+
+  return badges.join("");
+}
+
+function getPipsDotOffsets(value: number, spreadX: number, spreadY: number): [number, number][] {
+  const left = -spreadX;
+  const center = 0;
+  const right = spreadX;
+  const top = -spreadY;
+  const middle = 0;
+  const bottom = spreadY;
+
+  switch (value) {
+    case 0:
+      return [];
+    case 1:
+      return [[center, middle]];
+    case 2:
+      return [[left, top], [right, bottom]];
+    case 3:
+      return [[left, top], [center, middle], [right, bottom]];
+    case 4:
+      return [[left, top], [right, top], [left, bottom], [right, bottom]];
+    case 5:
+      return [[left, top], [right, top], [center, middle], [left, bottom], [right, bottom]];
+    case 6:
+      return [
+        [left, top],
+        [right, top],
+        [left, middle],
+        [right, middle],
+        [left, bottom],
+        [right, bottom],
+      ];
+    default:
+      return [];
+  }
+}
+
+function renderPipsDominoes(context: PipsRenderContext): string {
+  const output: string[] = [];
+  const inset = Math.round(context.metrics.cell * 0.12);
+  const pipRadius = Math.max(3.5, context.metrics.cell * 0.055);
+  const spreadX = context.metrics.cell * 0.15;
+  const spreadY = context.metrics.cell * 0.15;
+
+  context.difficulty.dominoes.forEach((domino, index) => {
+    const [firstCell, secondCell] = context.difficulty.solution[index];
+    const [r1, c1] = firstCell;
+    const [r2, c2] = secondCell;
+    const firstPos = getPipsCellTopLeft(r1, c1, context);
+    const secondPos = getPipsCellTopLeft(r2, c2, context);
+    const horizontal = r1 === r2;
+    const x = Math.min(firstPos.x, secondPos.x) + inset;
+    const y = Math.min(firstPos.y, secondPos.y) + inset;
+    const width = horizontal
+      ? context.metrics.cell * 2 + context.metrics.gap - inset * 2
+      : context.metrics.cell - inset * 2;
+    const height = horizontal
+      ? context.metrics.cell - inset * 2
+      : context.metrics.cell * 2 + context.metrics.gap - inset * 2;
+    const dividerX = horizontal
+      ? Math.min(firstPos.x, secondPos.x) + context.metrics.cell + context.metrics.gap / 2
+      : null;
+    const dividerY = horizontal
+      ? null
+      : Math.min(firstPos.y, secondPos.y) + context.metrics.cell + context.metrics.gap / 2;
+
+    output.push(
+      "<g>",
+      `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${Math.max(
+        11,
+        context.metrics.radius - 3
+      )}" fill="#f6f6f6" stroke="#444444" stroke-width="3"/>`
+    );
+
+    if (horizontal && dividerX !== null) {
+      output.push(
+        `<path d="M ${dividerX} ${y + 8} L ${dividerX} ${y + height - 8}" fill="none" stroke="#e2dbdb" stroke-width="3" stroke-linecap="round"/>`
+      );
+    } else if (dividerY !== null) {
+      output.push(
+        `<path d="M ${x + 8} ${dividerY} L ${x + width - 8} ${dividerY}" fill="none" stroke="#e2dbdb" stroke-width="3" stroke-linecap="round"/>`
+      );
+    }
+
+    [firstCell, secondCell].forEach(([row, col], valueIndex) => {
+      const center = {
+        x: context.originX + col * (context.metrics.cell + context.metrics.gap) + context.metrics.cell / 2,
+        y: context.originY + row * (context.metrics.cell + context.metrics.gap) + context.metrics.cell / 2,
+      };
+      getPipsDotOffsets(domino[valueIndex], spreadX, spreadY).forEach(([dx, dy]) => {
+        output.push(`<circle cx="${center.x + dx}" cy="${center.y + dy}" r="${pipRadius}" fill="#2c2c2c"/>`);
+      });
+    });
+
+    output.push("</g>");
+  });
+
+  return output.join("");
+}
+
+function renderWordPressPipsBoardSvg(answerDate: string, difficulty: PipsDifficultyResult, label: string): string {
+  const context = buildPipsContext(difficulty);
+  const gridWidth = (context.maxCol + 1) * context.metrics.cell + context.maxCol * context.metrics.gap;
+  const gridHeight = (context.maxRow + 1) * context.metrics.cell + context.maxRow * context.metrics.gap;
+  const svgWidth = context.originX + gridWidth + 86;
+  const svgHeight = context.originY + gridHeight + 86;
+  const cells: string[] = [];
+
+  for (let row = 0; row <= context.maxRow; row += 1) {
+    for (let col = 0; col <= context.maxCol; col += 1) {
+      const key = getPipsCoordKey(row, col);
+      if (!context.occupied.has(key)) continue;
+      const region = context.styledRegions.find((candidate) =>
+        candidate.indices.some(([candidateRow, candidateCol]) => candidateRow === row && candidateCol === col)
+      );
+      const { x, y } = getPipsCellTopLeft(row, col, context);
+      cells.push(
+        `<rect x="${x}" y="${y}" width="${context.metrics.cell}" height="${context.metrics.cell}" rx="${context.metrics.radius}" fill="#e1cbc5"/>`
+      );
+      if (region?.palette) {
+        cells.push(
+          `<rect x="${x}" y="${y}" width="${context.metrics.cell}" height="${context.metrics.cell}" rx="${context.metrics.radius}" fill="${region.palette.fill}"/>`
+        );
+      }
+    }
+  }
+
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" role="img" aria-label="${escapeHtml(
+      `Solved ${label} NYT Pips board for ${formatIsoDateLong(answerDate)}`
+    )}">`,
+    `<rect x="${context.originX - context.metrics.boardPad}" y="${context.originY - context.metrics.boardPad}" width="${
+      gridWidth + context.metrics.boardPad * 2
+    }" height="${gridHeight + context.metrics.boardPad * 2}" rx="26" fill="#dbc2b9"/>`,
+    cells.join(""),
+    renderPipsRegionOutlines(context),
+    renderPipsDominoes(context),
+    renderPipsClueBadges(context),
+    "</svg>",
+  ].join("");
+}
+
+function renderWordPressPipsPlacementList(difficulty: PipsDifficultyResult): string {
+  return difficulty.dominoes
+    .map((domino, index) => {
+      const [firstCell, secondCell] = difficulty.solution[index];
+      if (domino[0] === domino[1]) {
+        return `<li><strong>${domino[0]}-${domino[1]}:</strong> ${domino[0]}s fill ${formatPipsCoordLabel(
+          firstCell
+        )} and ${formatPipsCoordLabel(secondCell)}.</li>`;
+      }
+
+      return `<li><strong>${domino[0]}-${domino[1]}:</strong> ${domino[0]} goes in ${formatPipsCoordLabel(
+        firstCell
+      )}, and ${domino[1]} goes in ${formatPipsCoordLabel(secondCell)}.</li>`;
+    })
+    .join("");
+}
+
+function getWordPressPipsIntro(label: string): string {
+  if (label === "Easy") {
+    return "The solved board below keeps the NYT region layout intact, so you can compare the answer without decoding raw coordinates first.";
+  }
+  if (label === "Medium") {
+    return "This version works best as a visual cross-check: the clue regions stay in place, and every finished domino sits exactly where it belongs.";
+  }
+  return "Hard Pips is much easier to verify when the full board is visible, so the answer below pairs the NYT-style board with the exact solved placement of every domino.";
+}
+
+function renderWordPressPipsDifficultyHtml(
+  answerDate: string,
+  difficulty: PipsDifficultyResult,
+  label: "Easy" | "Medium" | "Hard"
+): string {
+  return renderWordPressHtmlMarkerSection(
+    [
+      "<style>",
+      ".tn-pips-answer-reveal{margin:1rem 0;}",
+      ".tn-pips-answer-reveal summary{display:inline-flex;align-items:center;justify-content:center;padding:.8rem 1.25rem;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:700;cursor:pointer;list-style:none;}",
+      ".tn-pips-answer-reveal summary::-webkit-details-marker{display:none;}",
+      ".tn-pips-answer-reveal[open] summary{display:none;}",
+      ".tn-pips-answer-reveal__content{margin-top:1rem;padding:1rem 1.1rem;border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;}",
+      ".tn-pips-answer-reveal__content p:last-child,.tn-pips-answer-reveal__content ul:last-child,.tn-pips-answer-reveal__content ol:last-child{margin-bottom:0;}",
+      ".tn-pips-answer-figure{margin:1rem 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}",
+      ".tn-pips-answer-figure svg{display:block;width:100%;height:auto;min-width:280px;}",
+      ".tn-pips-answer-list{margin-top:1rem;}",
+      ".tn-pips-answer-list li{margin:.4rem 0;}",
+      "</style>",
+      `<details class="tn-pips-answer-reveal" data-answer-signature="${escapeHtml(
+        buildPipsAnswerSignature(difficulty)
+      )}">`,
+      `<summary>Reveal ${label} Solution</summary>`,
+      '<div class="tn-pips-answer-reveal__content">',
+      `<p><strong>${label} puzzle #${difficulty.puzzleId}</strong></p>`,
+      `<p>${escapeHtml(getWordPressPipsIntro(label))}</p>`,
+      `<div class="tn-pips-answer-figure">${renderWordPressPipsBoardSvg(answerDate, difficulty, label)}</div>`,
+      "<p>The placement list below matches the solved board cell by cell, so you can confirm one domino at a time if you would rather not scan the whole puzzle at once.</p>",
+      `<ul class="wp-block-list tn-pips-answer-list">${renderWordPressPipsPlacementList(difficulty)}</ul>`,
+      "</div>",
+      "</details>",
+    ].join("\n")
   );
 }
 
@@ -1818,6 +2726,16 @@ async function syncStrands(
       post: LoadedWordPressPost,
       envPrefix?: string
     ): Promise<"updated" | "skipped:no-change" | "skipped:answer-unchanged"> {
+      const currentSpangramSection = extractMarkedSectionContent(
+        post.contentRaw,
+        getStrandsSpangramMarkerStart(),
+        getStrandsSpangramMarkerEnd()
+      );
+      const currentThemeWordsSection = extractMarkedSectionContent(
+        post.contentRaw,
+        getStrandsThemeWordsMarkerStart(),
+        getStrandsThemeWordsMarkerEnd()
+      );
       const currentDateSection = extractMarkedSectionContent(
         post.contentRaw,
         getStrandsCurrentDateMarkerStart(),
@@ -1832,8 +2750,17 @@ async function syncStrands(
         currentDateSection === null || currentDateSection.trim() === expectedCurrentDate;
       const isClueUpToDate = currentClueSection === null || currentClueSection.trim() === expectedClue;
       const currentSignature = extractCurrentStrandsAnswerSignature(post.contentRaw);
+      const hasVisualBoardMarkup =
+        currentSpangramSection?.includes("tn-strands-board") &&
+        currentThemeWordsSection?.includes("tn-strands-board");
 
-      if (currentSignature === nextSignature && post.titleRaw === updatedTitle && isCurrentDateUpToDate && isClueUpToDate) {
+      if (
+        currentSignature === nextSignature &&
+        post.titleRaw === updatedTitle &&
+        isCurrentDateUpToDate &&
+        isClueUpToDate &&
+        hasVisualBoardMarkup
+      ) {
         return "skipped:answer-unchanged";
       }
 
@@ -1901,7 +2828,7 @@ async function syncSpellingBee(
     pangramCount: result.pangrams.length,
     database: dryRun ? "skipped:dry-run" : "saved",
     wordpress: "skipped:not-configured",
-    wordpress_gw: "skipped:not-configured",
+    wordpress_gw: dryRun ? "skipped:dry-run" : "updated",
   };
 
   if (!dryRun) {
@@ -1922,6 +2849,55 @@ async function syncSpellingBee(
       extractedFrom: result.extractedFrom,
       payload: toPlainObject(result),
     });
+
+    const updatedTitle = renderWordPressSpellingBeePostTitle(result.answerDate, result.puzzleId);
+    const updatedContentDate = escapeHtml(formatIsoDateLong(result.answerDate));
+    const updatedCenterLetter = escapeHtml(result.centerLetter);
+    const updatedOuterLetters = escapeHtml(result.outerLetters.join(", "));
+    const renderedPangramsHtml = renderWordPressSpellingBeePangramsHtml(result);
+    const renderedAnswersHtml = renderWordPressSpellingBeeAnswersHtml(result);
+
+    try {
+      const gwLoadedPost = await fetchWordPressPost(getGwSpellingBeeArticleUrl(), "GW");
+      const withDate = replaceInlineMarkedText(
+        gwLoadedPost.contentRaw,
+        updatedContentDate,
+        SPELLING_BEE_MARKERS.currentDateStart,
+        SPELLING_BEE_MARKERS.currentDateEnd
+      );
+      const withCenterLetter = replaceInlineMarkedText(
+        withDate,
+        updatedCenterLetter,
+        SPELLING_BEE_MARKERS.centerLetterStart,
+        SPELLING_BEE_MARKERS.centerLetterEnd
+      );
+      const withOuterLetters = replaceInlineMarkedText(
+        withCenterLetter,
+        updatedOuterLetters,
+        SPELLING_BEE_MARKERS.outerLettersStart,
+        SPELLING_BEE_MARKERS.outerLettersEnd
+      );
+      const withPangrams = replaceMarkedSection(
+        withOuterLetters,
+        renderedPangramsHtml,
+        SPELLING_BEE_MARKERS.pangramsStart,
+        SPELLING_BEE_MARKERS.pangramsEnd
+      );
+      const updatedContent = replaceMarkedSection(
+        withPangrams,
+        renderedAnswersHtml,
+        SPELLING_BEE_MARKERS.answersStart,
+        SPELLING_BEE_MARKERS.answersEnd
+      );
+
+      if (updatedContent === gwLoadedPost.contentRaw && gwLoadedPost.titleRaw === updatedTitle) {
+        summary.wordpress_gw = "skipped:no-change";
+      } else {
+        await updateWordPressPost(gwLoadedPost, updatedContent, updatedTitle, "GW");
+      }
+    } catch (error) {
+      summary.wordpress_gw = `error:${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   return summary;
@@ -1941,7 +2917,7 @@ async function syncLetterBoxed(
     par: result.par,
     database: dryRun ? "skipped:dry-run" : "saved",
     wordpress: "skipped:not-configured",
-    wordpress_gw: "skipped:not-configured",
+    wordpress_gw: dryRun ? "skipped:dry-run" : "updated",
   };
 
   if (!dryRun) {
@@ -1959,6 +2935,41 @@ async function syncLetterBoxed(
       extractedFrom: result.extractedFrom,
       payload: toPlainObject(result),
     });
+
+    const updatedTitle = renderWordPressLetterBoxedPostTitle(result.answerDate, result.puzzleId);
+    const updatedContentDate = escapeHtml(formatIsoDateLong(result.answerDate));
+    const updatedSides = escapeHtml(result.sides.join(" | "));
+    const renderedAnswerHtml = renderWordPressLetterBoxedAnswerHtml(result);
+
+    try {
+      const gwLoadedPost = await fetchWordPressPost(getGwLetterBoxedArticleUrl(), "GW");
+      const withDate = replaceInlineMarkedText(
+        gwLoadedPost.contentRaw,
+        updatedContentDate,
+        LETTER_BOXED_MARKERS.currentDateStart,
+        LETTER_BOXED_MARKERS.currentDateEnd
+      );
+      const withSides = replaceInlineMarkedText(
+        withDate,
+        updatedSides,
+        LETTER_BOXED_MARKERS.sidesStart,
+        LETTER_BOXED_MARKERS.sidesEnd
+      );
+      const updatedContent = replaceMarkedSection(
+        withSides,
+        renderedAnswerHtml,
+        LETTER_BOXED_MARKERS.answerStart,
+        LETTER_BOXED_MARKERS.answerEnd
+      );
+
+      if (updatedContent === gwLoadedPost.contentRaw && gwLoadedPost.titleRaw === updatedTitle) {
+        summary.wordpress_gw = "skipped:no-change";
+      } else {
+        await updateWordPressPost(gwLoadedPost, updatedContent, updatedTitle, "GW");
+      }
+    } catch (error) {
+      summary.wordpress_gw = `error:${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   return summary;
@@ -1978,7 +2989,7 @@ async function syncSudoku(
     hardPuzzleId: result.hard.puzzleId,
     database: dryRun ? "skipped:dry-run" : "saved",
     wordpress: "skipped:not-configured",
-    wordpress_gw: "skipped:not-configured",
+    wordpress_gw: dryRun ? "skipped:dry-run" : "updated",
   };
 
   if (!dryRun) {
@@ -1996,6 +3007,48 @@ async function syncSudoku(
       extractedFrom: result.extractedFrom,
       payload: toPlainObject(result),
     });
+
+    const updatedTitle = renderWordPressSudokuPostTitle(result.answerDate);
+    const updatedContentDate = escapeHtml(formatIsoDateLong(result.answerDate));
+    const renderedEasyHtml = renderWordPressSudokuDifficultyHtml(result.easy, "Easy");
+    const renderedMediumHtml = renderWordPressSudokuDifficultyHtml(result.medium, "Medium");
+    const renderedHardHtml = renderWordPressSudokuDifficultyHtml(result.hard, "Hard");
+
+    try {
+      const gwLoadedPost = await fetchWordPressPost(getGwSudokuArticleUrl(), "GW");
+      const withDate = replaceInlineMarkedText(
+        gwLoadedPost.contentRaw,
+        updatedContentDate,
+        SUDOKU_MARKERS.currentDateStart,
+        SUDOKU_MARKERS.currentDateEnd
+      );
+      const withEasy = replaceMarkedSection(
+        withDate,
+        renderedEasyHtml,
+        SUDOKU_MARKERS.easyStart,
+        SUDOKU_MARKERS.easyEnd
+      );
+      const withMedium = replaceMarkedSection(
+        withEasy,
+        renderedMediumHtml,
+        SUDOKU_MARKERS.mediumStart,
+        SUDOKU_MARKERS.mediumEnd
+      );
+      const updatedContent = replaceMarkedSection(
+        withMedium,
+        renderedHardHtml,
+        SUDOKU_MARKERS.hardStart,
+        SUDOKU_MARKERS.hardEnd
+      );
+
+      if (updatedContent === gwLoadedPost.contentRaw && gwLoadedPost.titleRaw === updatedTitle) {
+        summary.wordpress_gw = "skipped:no-change";
+      } else {
+        await updateWordPressPost(gwLoadedPost, updatedContent, updatedTitle, "GW");
+      }
+    } catch (error) {
+      summary.wordpress_gw = `error:${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   return summary;
@@ -2015,7 +3068,7 @@ async function syncPips(
     hardPuzzleId: result.hard.puzzleId,
     database: dryRun ? "skipped:dry-run" : "saved",
     wordpress: "skipped:not-configured",
-    wordpress_gw: "skipped:not-configured",
+    wordpress_gw: dryRun ? "skipped:dry-run" : "updated",
   };
 
   if (!dryRun) {
@@ -2034,6 +3087,48 @@ async function syncPips(
       extractedFrom: result.extractedFrom,
       payload: toPlainObject(result),
     });
+
+    const updatedTitle = renderWordPressPipsPostTitle(result.answerDate);
+    const updatedContentDate = escapeHtml(formatIsoDateLong(result.answerDate));
+    const renderedEasyHtml = renderWordPressPipsDifficultyHtml(result.answerDate, result.easy, "Easy");
+    const renderedMediumHtml = renderWordPressPipsDifficultyHtml(result.answerDate, result.medium, "Medium");
+    const renderedHardHtml = renderWordPressPipsDifficultyHtml(result.answerDate, result.hard, "Hard");
+
+    try {
+      const gwLoadedPost = await fetchWordPressPost(getGwPipsArticleUrl(), "GW");
+      const withDate = replaceInlineMarkedText(
+        gwLoadedPost.contentRaw,
+        updatedContentDate,
+        PIPS_MARKERS.currentDateStart,
+        PIPS_MARKERS.currentDateEnd
+      );
+      const withEasy = replaceMarkedSection(
+        withDate,
+        renderedEasyHtml,
+        PIPS_MARKERS.easyStart,
+        PIPS_MARKERS.easyEnd
+      );
+      const withMedium = replaceMarkedSection(
+        withEasy,
+        renderedMediumHtml,
+        PIPS_MARKERS.mediumStart,
+        PIPS_MARKERS.mediumEnd
+      );
+      const updatedContent = replaceMarkedSection(
+        withMedium,
+        renderedHardHtml,
+        PIPS_MARKERS.hardStart,
+        PIPS_MARKERS.hardEnd
+      );
+
+      if (updatedContent === gwLoadedPost.contentRaw && gwLoadedPost.titleRaw === updatedTitle) {
+        summary.wordpress_gw = "skipped:no-change";
+      } else {
+        await updateWordPressPost(gwLoadedPost, updatedContent, updatedTitle, "GW");
+      }
+    } catch (error) {
+      summary.wordpress_gw = `error:${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   return summary;
