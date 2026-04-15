@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { internalAction, action } from "./_generated/server";
 import { internal } from "./_generated/api";
+import * as cheerio from "cheerio";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,126 @@ interface AiArticleResult {
   title: string;
   html: string;
   metaDescription: string;
+}
+
+interface EmbedInfo {
+  type: "youtube" | "twitter";
+  embedCode: string;
+  context: string;
+}
+
+// ── Embed Extraction ───────────────────────────────────────────────────────
+
+async function extractEmbedsFromSources(sourceUrls: string[]): Promise<EmbedInfo[]> {
+  const allEmbeds: EmbedInfo[] = [];
+
+  for (const url of sourceUrls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GamingWizeBot/1.0; +https://www.gamingwize.com)",
+          Accept: "text/html",
+        },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) continue;
+
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      // YouTube iframes
+      $("iframe").each((_, el) => {
+        const src = $(el).attr("src") ?? $(el).attr("data-src") ?? "";
+        if (src.includes("youtube.com/embed") || src.includes("youtu.be")) {
+          const videoIdMatch = src.match(/(?:embed\/|youtu\.be\/)([^?&"]+)/);
+          if (videoIdMatch) {
+            const videoId = videoIdMatch[1];
+            const prevText = $(el).closest("figure, div, p").prev("p").text().replace(/\s+/g, " ").trim().slice(0, 200);
+            const nextText = $(el).closest("figure, div, p").next("p").text().replace(/\s+/g, " ").trim().slice(0, 200);
+            const context = [prevText, nextText].filter(Boolean).join(" | ") || `YouTube video ${videoId}`;
+            const embedCode = `<figure class="wp-block-embed is-type-video"><div class="wp-block-embed__wrapper"><iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></figure>`;
+            allEmbeds.push({ type: "youtube", embedCode, context });
+          }
+        }
+      });
+
+      // Twitter/X tweet blockquotes
+      $("blockquote.twitter-tweet").each((_, el) => {
+        const tweetText = $(el).text().replace(/\s+/g, " ").trim().slice(0, 300);
+        const embedCode = $.html(el) + '\n<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>';
+        allEmbeds.push({ type: "twitter", embedCode, context: tweetText });
+      });
+    } catch {
+      // Skip failed fetches silently
+    }
+  }
+
+  return allEmbeds;
+}
+
+// ── Embed Insertion (second model pass) ───────────────────────────────────
+
+async function insertEmbedsIntoArticle(
+  articleHtml: string,
+  embeds: EmbedInfo[]
+): Promise<string> {
+  const openaiApiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!openaiApiKey) throw new Error("OPENAI_API_KEY environment variable is required");
+
+  const embedDescriptions = embeds
+    .map(
+      (e, i) =>
+        `--- Embed ${i + 1} (${e.type.toUpperCase()}) ---\nContext from source: "${e.context}"\nEmbed HTML:\n${e.embedCode}`
+    )
+    .join("\n\n");
+
+  const prompt = `You are an editor adding media embeds to a finished news article. Your only job is to place the provided embeds where they add the most value. You do NOT change any existing text.
+
+ARTICLE:
+${articleHtml}
+
+EMBEDS TO CONSIDER:
+${embedDescriptions}
+
+RULES:
+- Only insert embeds that directly relate to what is being discussed at that specific point in the article
+- Insert embeds BETWEEN existing HTML blocks (after a closing </p>, </h2>, or </h3> tag) — never inside them
+- If an embed does not clearly add value to a specific section, skip it entirely — do not force it in
+- Do NOT modify, reword, or rearrange any existing article content
+- Do NOT add captions, labels, or wrapper text around the embeds
+- Each embed should appear at most once
+- Return the complete article HTML with embeds cleanly inserted
+- Return ONLY the HTML, no JSON wrapper, no markdown fences, no explanation`;
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      max_tokens: 6000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI embed insertion failed (${response.status}): ${errorText.slice(0, 500)}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: { message: { content: string } }[];
+  };
+
+  const result = data.choices[0]?.message?.content?.trim() ?? "";
+  return result || articleHtml;
 }
 
 interface WordPressCreateResponse {
@@ -277,6 +398,19 @@ async function handleWriteGamingNewsArticle(
         pending.sourceSnippets
       );
       console.log(`Article written: "${article.title}" (${article.html.length} chars)`);
+
+      // Extract YouTube/Twitter embeds from source pages and insert into article
+      if (pending.sourceUrls && pending.sourceUrls.length > 0) {
+        console.log("Scanning sources for YouTube/Twitter embeds...");
+        const embeds = await extractEmbedsFromSources(pending.sourceUrls);
+        if (embeds.length > 0) {
+          console.log(`Found ${embeds.length} embed(s) — inserting into article with gpt-4.1...`);
+          article.html = await insertEmbedsIntoArticle(article.html, embeds);
+          console.log(`Embed insertion done (${article.html.length} chars)`);
+        } else {
+          console.log("No embeds found in sources.");
+        }
+      }
 
       if (dryRun) {
         results.push({

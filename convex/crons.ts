@@ -19,6 +19,22 @@ crons.cron(
   {},
 );
 
+// Sync Contexto at 03:35 UTC (09:05 IST)
+crons.cron(
+  "sync-contexto-morning-905-ist",
+  "35 3 * * *",
+  internal.syncContexto.run,
+  {},
+);
+
+// Sync Contexto at 03:45 UTC (09:15 IST)
+crons.cron(
+  "sync-contexto-morning-915-ist",
+  "45 3 * * *",
+  internal.syncContexto.run,
+  {},
+);
+
 // Sync Letroso at 03:32 UTC (09:02 IST)
 crons.cron(
   "sync-letroso-morning-902-ist",
@@ -80,6 +96,14 @@ crons.cron(
   "update-article-titles-monthly",
   "0 1 1 * *",
   internal.updateArticleTitles.run,
+  {},
+);
+
+// Sync LinkedIn puzzles daily at 05:30 UTC (11:00 IST)
+crons.cron(
+  "sync-linkedin-puzzles-daily",
+  "30 5 * * *",
+  internal.syncLinkedInPuzzles.run,
   {},
 );
 

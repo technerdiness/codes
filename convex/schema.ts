@@ -254,6 +254,110 @@ export default defineSchema({
   })
     .index("by_automation_type_and_ran_at", ["automationType", "ranAt"]),
 
+  contextoAnswers: defineTable({
+    answerDate: v.string(),
+    answerDateSource: v.string(),
+    answer: v.string(),
+    sourceUrl: v.string(),
+    pageTitle: v.optional(v.string()),
+    ogTitle: v.optional(v.string()),
+    publishedAt: v.optional(v.string()),
+    modifiedAt: v.optional(v.string()),
+    fetchedAt: v.string(),
+    sectionHeading: v.string(),
+    sectionSelector: v.string(),
+    extractedFrom: v.string(),
+    tileCount: v.number(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  linkedInCrossclimbAnswers: defineTable({
+    puzzleId: v.number(),
+    answerDate: v.string(),
+    // words in order (top to bottom rung)
+    words: v.array(v.string()),
+    // clues in order matching words
+    clues: v.array(v.string()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  linkedInQueensAnswers: defineTable({
+    puzzleId: v.number(),
+    answerDate: v.string(),
+    gridSize: v.number(),
+    // queen positions: one per color region, in color-index order
+    solution: v.array(v.object({ row: v.number(), col: v.number() })),
+    // flat color grid: gridSize*gridSize numbers, row-major
+    colorGrid: v.array(v.number()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  linkedInTangoAnswers: defineTable({
+    puzzleId: v.number(),
+    answerDate: v.string(),
+    gridSize: v.number(),
+    // flat solution: "ZERO" or "ONE" per cell, row-major
+    solution: v.array(v.string()),
+    // cell indices that were pre-filled in the puzzle
+    presetCellIdxes: v.array(v.number()),
+    // constraint edges: isEqual=true means "=", isEqual=false means "×"
+    edges: v.optional(v.array(v.object({ startIdx: v.number(), endIdx: v.number(), isEqual: v.boolean() }))),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  linkedInMiniSudokuAnswers: defineTable({
+    puzzleId: v.number(),
+    answerDate: v.string(),
+    name: v.string(),
+    gridRowSize: v.number(),
+    gridColSize: v.number(),
+    // flat solution: numbers 1–N, row-major
+    solution: v.array(v.number()),
+    // cell indices that were pre-filled
+    presetCellIdxes: v.array(v.number()),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
+  linkedInZipAnswers: defineTable({
+    puzzleId: v.number(),
+    answerDate: v.string(), // YYYY-MM-DD
+    gridSize: v.number(),
+    solution: v.array(v.number()), // ordered cell indices forming the path
+    orderedSequence: v.array(v.number()), // numbered waypoint cell indices
+    walls: v.array(v.object({
+      cellIdx: v.number(),
+      direction: v.union(v.literal("UP"), v.literal("DOWN"), v.literal("LEFT"), v.literal("RIGHT")),
+    })),
+    fetchedAt: v.string(),
+    extractedFrom: v.string(),
+    payload: v.any(),
+  })
+    .index("by_answer_date", ["answerDate"])
+    .index("by_puzzle_id", ["puzzleId"])
+    .index("by_fetched_at", ["fetchedAt"]),
+
   strandsAnswers: defineTable({
     answerDate: v.string(),
     answerDateSource: v.string(),

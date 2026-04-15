@@ -441,6 +441,7 @@ const AUTOMATION_META = {
   game_codes:          { label: "Game Codes",          icon: Gamepad2 },
   nyt_puzzles:         { label: "NYT Puzzles",          icon: Puzzle },
   letroso:             { label: "Letroso",              icon: LetterText },
+  contexto:            { label: "Contexto",             icon: LetterText },
   collect_gaming_news: { label: "Collect Gaming News",  icon: Newspaper },
   write_gaming_news:   { label: "Write Gaming News",    icon: Zap },
 };
@@ -1251,6 +1252,8 @@ function GamingNewsPage({ notify }) {
 function PuzzlesPage({ notify }) {
   const syncNyt = useAction(api.syncNytPuzzles.syncNytPuzzles);
   const syncLetroso = useAction(api.syncLetroso.syncLetroso);
+  const syncContexto = useAction(api.syncContexto.syncContexto);
+  const syncLinkedIn = useAction(api.syncLinkedInPuzzles.syncLinkedInPuzzles);
   const [busy, setBusy] = useState({});
 
   async function runPuzzle(key, label, action, args) {
@@ -1329,8 +1332,132 @@ function PuzzlesPage({ notify }) {
       icon: "L",
       color: "bg-amber-500/15 text-amber-400",
       updatesWordpress: true,
+      provider: "letroso",
+    },
+    {
+      id: "contexto",
+      title: "Contexto",
+      description: "Scrape today's Contexto answer and update the answer history on WordPress.",
+      icon: "Co",
+      color: "bg-teal-500/15 text-teal-400",
+      updatesWordpress: true,
+      provider: "contexto",
+    },
+    {
+      id: "zip",
+      title: "LinkedIn Zip",
+      description: "Fetch today's LinkedIn Zip puzzle solution via the Voyager API and save to Convex.",
+      icon: "Zi",
+      color: "bg-sky-500/15 text-sky-400",
+      updatesWordpress: false,
+      provider: "linkedin",
+    },
+    {
+      id: "crossclimb",
+      title: "LinkedIn Crossclimb",
+      description: "Fetch today's Crossclimb word ladder (7 rungs + clues) and save to Convex.",
+      icon: "CC",
+      color: "bg-orange-500/15 text-orange-400",
+      updatesWordpress: false,
+      provider: "linkedin",
+    },
+    {
+      id: "queens",
+      title: "LinkedIn Queens",
+      description: "Fetch today's Queens queen placements and color grid and save to Convex.",
+      icon: "Qu",
+      color: "bg-violet-500/15 text-violet-400",
+      updatesWordpress: false,
+      provider: "linkedin",
+    },
+    {
+      id: "tango",
+      title: "LinkedIn Tango",
+      description: "Fetch today's Tango sun/moon grid solution and save to Convex.",
+      icon: "Ta",
+      color: "bg-yellow-500/15 text-yellow-400",
+      updatesWordpress: false,
+      provider: "linkedin",
+    },
+    {
+      id: "mini-sudoku",
+      title: "LinkedIn Mini Sudoku",
+      description: "Fetch today's Mini Sudoku solution grid and save to Convex.",
+      icon: "Su",
+      color: "bg-green-500/15 text-green-400",
+      updatesWordpress: false,
+      provider: "linkedin",
     },
   ];
+
+  function renderPuzzleCard(p) {
+    const isNyt = !p.provider;
+    const isLinkedIn = p.provider === "linkedin";
+    const action = isNyt
+      ? syncNyt
+      : isLinkedIn
+      ? syncLinkedIn
+      : p.provider === "contexto"
+      ? syncContexto
+      : syncLetroso;
+    const dryArgs = isNyt || isLinkedIn ? { puzzles: [p.id], dryRun: true } : { dryRun: true };
+    const runArgs = isNyt || isLinkedIn ? { puzzles: [p.id] } : {};
+    const dryKey = `${p.id}-dry`;
+    const runKey = `${p.id}-run`;
+    const runConfirm = p.updatesWordpress
+      ? `Sync ${p.title}? This will update WordPress.`
+      : `Sync ${p.title}? This will fetch and save data in Convex.`;
+
+    return (
+      <Card key={p.id}>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg font-bold text-lg",
+                p.color,
+              )}
+            >
+              {p.icon}
+            </div>
+            <div>
+              <CardTitle>{p.title}</CardTitle>
+              <CardDescription className="mt-0.5">{p.description}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => runPuzzle(dryKey, `Dry run: ${p.title}`, action, dryArgs)}
+              disabled={busy[dryKey]}
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              {busy[dryKey] ? "Running..." : "Dry Run"}
+            </Button>
+            <Button
+              variant="success"
+              size="sm"
+              onClick={() => {
+                if (window.confirm(runConfirm))
+                  runPuzzle(runKey, `Sync: ${p.title}`, action, runArgs);
+              }}
+              disabled={busy[runKey]}
+            >
+              <Play className="h-3.5 w-3.5" />
+              {busy[runKey] ? "Running..." : "Run"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const nytPuzzles = puzzles.filter((p) => !p.provider);
+  const linkedInPuzzles = puzzles.filter((p) => p.provider === "linkedin");
+  const otherPuzzles = puzzles.filter((p) => p.provider && p.provider !== "linkedin");
 
   return (
     <>
@@ -1338,7 +1465,7 @@ function PuzzlesPage({ notify }) {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Puzzles</h2>
           <p className="text-muted-foreground">
-            Run individual puzzle syncs or batch all NYT puzzles together. Newer NYT puzzle flows save to Convex only for now.
+            Run individual puzzle syncs or batch all NYT puzzles together.
           </p>
         </div>
         <div className="flex gap-2">
@@ -1367,67 +1494,31 @@ function PuzzlesPage({ notify }) {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {puzzles.map((p) => {
-          const isNyt = p.id !== "letroso";
-          const action = isNyt ? syncNyt : syncLetroso;
-          const dryArgs = isNyt
-            ? { puzzles: [p.id], dryRun: true }
-            : { dryRun: true };
-          const runArgs = isNyt ? { puzzles: [p.id] } : {};
-          const dryKey = `${p.id}-dry`;
-          const runKey = `${p.id}-run`;
-          const runConfirm = p.updatesWordpress
-            ? `Sync ${p.title}? This will update WordPress.`
-            : `Sync ${p.title}? This will fetch and save the latest NYT data in Convex.`;
-
-          return (
-            <Card key={p.id}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-lg font-bold text-lg",
-                      p.color,
-                    )}
-                  >
-                    {p.icon}
-                  </div>
-                  <div>
-                    <CardTitle>{p.title}</CardTitle>
-                    <CardDescription className="mt-0.5">{p.description}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => runPuzzle(dryKey, `Dry run: ${p.title}`, action, dryArgs)}
-                    disabled={busy[dryKey]}
-                  >
-                    <FlaskConical className="h-3.5 w-3.5" />
-                    {busy[dryKey] ? "Running..." : "Dry Run"}
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={() => {
-                      if (window.confirm(runConfirm))
-                        runPuzzle(runKey, `Sync: ${p.title}`, action, runArgs);
-                    }}
-                    disabled={busy[runKey]}
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                    {busy[runKey] ? "Running..." : "Run"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      {/* NYT */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">NYT</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {nytPuzzles.map(renderPuzzleCard)}
+        </div>
       </div>
+
+      {/* LinkedIn */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">LinkedIn</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {linkedInPuzzles.map(renderPuzzleCard)}
+        </div>
+      </div>
+
+      {/* Other */}
+      {otherPuzzles.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Other</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {otherPuzzles.map(renderPuzzleCard)}
+          </div>
+        </div>
+      )}
     </>
   );
 }
